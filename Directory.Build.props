@@ -9,7 +9,7 @@
     <PackageTags>typst;pdf;interop;native</PackageTags>
     <Description>A high-performance .NET interop library for Typst, providing a native bridge to the Typst compilation engine.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
 
     <!-- SourceLink and Deterministic Builds -->
     <PublishRepositoryUrl>true</PublishRepositoryUrl>

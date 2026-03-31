@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Multi-target the exact same frameworks as the main package -->
+    <TargetFrameworks>net10.0;net9.0;net8.0;netstandard2.0;net48</TargetFrameworks>
+    
+    <PackageId>TypstInterop.runtime.$(RuntimeIdentifier)</PackageId>
+    <Version>$(Version)</Version>
+    <Authors>Stanisław Nieradko</Authors>
+    <Description>Native runtime implementation for TypstInterop on $(RuntimeIdentifier).</Description>
+    <PackageProjectUrl>https://github.com/KanarekLife/TypstInterop</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/KanarekLife/TypstInterop</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>typst;native;runtime;$(RuntimeIdentifier)</PackageTags>
+
+    <!-- This project only packs files, it does not compile code -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <IncludeSymbols>false</IncludeSymbols>
+    
+    <!-- Suppress warnings about empty lib folders -->
+    <NoWarn>$(NoWarn);NU5128;NU5100;NU5131</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Include the native binary in the RIDs folder -->
+    <None Include="../TypstInterop/runtimes/$(RuntimeIdentifier)/native/*" 
+          Pack="true" 
+          PackagePath="runtimes/$(RuntimeIdentifier)/native/" />
+    
+    <!-- Add placeholder files for every TFM to satisfy NuGet strictness -->
+    <None Include="../LICENSE" Pack="true" PackagePath="lib/net10.0/_._" />
+    <None Include="../LICENSE" Pack="true" PackagePath="lib/net9.0/_._" />
+    <None Include="../LICENSE" Pack="true" PackagePath="lib/net8.0/_._" />
+    <None Include="../LICENSE" Pack="true" PackagePath="lib/netstandard2.0/_._" />
+    <None Include="../LICENSE" Pack="true" PackagePath="lib/net48/_._" />
+    
+    <None Include="../LICENSE" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

@@ -105,6 +105,9 @@ jobs:
           # We use a specific pattern to only match the Version tag
           sed -i "s|<Version>$CUR_VER</Version>|<Version>$NEW_VER</Version>|" Directory.Build.props
           
+          # Update TypstInterop.csproj (sync runtime dependencies)
+          sed -i "s|Version=\"$CUR_VER\"|Version=\"$NEW_VER\"|g" TypstInterop/TypstInterop.csproj
+          
           # Update Cargo.toml (sync version)
           # We update the first occurrence of version = "..."
           RUST_CUR=$(grep -m1 "version =" typst_interop/Cargo.toml | cut -d '"' -f2)
@@ -115,7 +118,7 @@ jobs:
           VERSION=${{ steps.versioning.outputs.new_version }}
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Directory.Build.props typst_interop/Cargo.toml
+          git add Directory.Build.props typst_interop/Cargo.toml TypstInterop/TypstInterop.csproj
           git commit -m "chore: promote to v$VERSION"
           git tag -a "v$VERSION" -m "Release v$VERSION"
           git push origin main --follow-tags

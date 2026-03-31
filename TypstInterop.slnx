@@ -6,5 +6,6 @@
     <Project Path="examples/TypstInterop.Example.Net48/TypstInterop.Example.Net48.csproj" />
   </Folder>
   <Project Path="TypstInterop.Benchmarks/TypstInterop.Benchmarks.csproj" />
+  <Project Path="TypstInterop.Runtime/TypstInterop.Runtime.csproj" />
   <Project Path="TypstInterop.Tests/TypstInterop.Tests.csproj" />
 </Solution>

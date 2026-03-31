@@ -108,7 +108,7 @@ jobs:
             10.0.x
 
       - name: Download All Native Binaries
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -127,11 +127,20 @@ jobs:
           cp artifacts/native-linux-arm64/* TypstInterop/runtimes/linux-arm64/native/
           cp artifacts/native-osx-x64/* TypstInterop/runtimes/osx-x64/native/
           cp artifacts/native-osx-arm64/* TypstInterop/runtimes/osx-arm64/native/
+          
+          echo "Verifying organized runtimes structure:"
+          ls -R TypstInterop/runtimes
 
-      - name: Build and Pack
+      - name: Build and Pack Runtimes
+        run: |
+          for rid in win-x64 win-arm64 linux-x64 linux-arm64 osx-x64 osx-arm64; do
+            dotnet pack TypstInterop.Runtime/TypstInterop.Runtime.csproj -c Release -p:RuntimeIdentifier=$rid -p:BuildRust=false -p:NoBuild=true --output ./nupkg
+          done
+
+      - name: Build and Pack Main
         run: |
           dotnet build TypstInterop.slnx -c Release -p:BuildRust=false
-          dotnet pack TypstInterop/TypstInterop.csproj -c Release -p:BuildRust=false --output ./nupkg
+          dotnet pack TypstInterop/TypstInterop.csproj -c Release -p:BuildRust=false -p:PackRuntimeDependencies=true --output ./nupkg --source ./nupkg --source https://api.nuget.org/v3/index.json
 
       - name: Upload NuGet Package
         uses: actions/upload-artifact@v7

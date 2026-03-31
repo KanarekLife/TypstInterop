@@ -1,7 +1,7 @@
 [package]
 name = "typst_interop"
 authors = ["Stanisław Nieradko <stanislaw@nieradko.com>"]
-version = "1.0.0"
+version = "1.0.1"
 edition = "2024"
 repository = "https://github.com/KanarekLife/TypstInterop"
 documentation = "https://github.com/KanarekLife/TypstInterop"
@@ -25,3 +25,10 @@ typst-syntax = "0.14.2"
 
 [build-dependencies]
 csbindgen = "1.9.0"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -17,6 +17,16 @@
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
   </ItemGroup>
 
+  <!-- Runtime dependencies -->
+  <ItemGroup Condition="'$(PackRuntimeDependencies)' == 'true'">
+    <PackageReference Include="TypstInterop.runtime.win-x64" Version="$(Version)" />
+    <PackageReference Include="TypstInterop.runtime.win-arm64" Version="$(Version)" />
+    <PackageReference Include="TypstInterop.runtime.linux-x64" Version="$(Version)" />
+    <PackageReference Include="TypstInterop.runtime.linux-arm64" Version="$(Version)" />
+    <PackageReference Include="TypstInterop.runtime.osx-x64" Version="$(Version)" />
+    <PackageReference Include="TypstInterop.runtime.osx-arm64" Version="$(Version)" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0' or '$(TargetFramework)' == 'net48'">
     <PackageReference Include="System.Memory" Version="4.6.0" />
     <PackageReference Include="System.Buffers" Version="4.6.0" />
@@ -83,11 +93,4 @@
       SkipUnchangedFiles="true"
     />
   </Target>
-
-  <ItemGroup>
-    <Content Include="runtimes\**\*.*">
-      <PackagePath>runtimes</PackagePath>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
 </Project>
