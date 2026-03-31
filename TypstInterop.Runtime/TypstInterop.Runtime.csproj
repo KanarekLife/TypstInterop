@@ -1,8 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <!-- Multi-target the exact same frameworks as the main package -->
     <TargetFrameworks>net10.0;net9.0;net8.0;netstandard2.0;net48</TargetFrameworks>
-    
     <PackageId>TypstInterop.runtime.$(RuntimeIdentifier)</PackageId>
     <Version>$(Version)</Version>
     <Authors>Stanisław Nieradko</Authors>
@@ -10,31 +8,31 @@
     <PackageProjectUrl>https://github.com/KanarekLife/TypstInterop</PackageProjectUrl>
     <RepositoryUrl>https://github.com/KanarekLife/TypstInterop</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageTags>typst;native;runtime;$(RuntimeIdentifier)</PackageTags>
-
-    <!-- This project only packs files, it does not compile code -->
-    <IncludeBuildOutput>false</IncludeBuildOutput>
-    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <IncludeSymbols>false</IncludeSymbols>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     
-    <!-- Suppress warnings about empty lib folders -->
-    <NoWarn>$(NoWarn);NU5128;NU5100;NU5131</NoWarn>
+    <!-- Truly disable compilation and output -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <IncludeSymbols>false</IncludeSymbols>
+    <NoWarn>$(NoWarn);NU5128;NU5100;NU5131;CS2008</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Include the native binary in the RIDs folder -->
+    <!-- Native binary -->
     <None Include="../TypstInterop/runtimes/$(RuntimeIdentifier)/native/*" 
           Pack="true" 
           PackagePath="runtimes/$(RuntimeIdentifier)/native/" />
     
-    <!-- Add placeholder files for every TFM to satisfy NuGet strictness -->
-    <None Include="../LICENSE" Pack="true" PackagePath="lib/net10.0/_._" />
-    <None Include="../LICENSE" Pack="true" PackagePath="lib/net9.0/_._" />
-    <None Include="../LICENSE" Pack="true" PackagePath="lib/net8.0/_._" />
-    <None Include="../LICENSE" Pack="true" PackagePath="lib/netstandard2.0/_._" />
-    <None Include="../LICENSE" Pack="true" PackagePath="lib/net48/_._" />
+    <!-- Placeholder for every TFM using the real empty file -->
+    <!-- These _._ files are a NuGet convention to signal TFM compatibility without shipping a DLL -->
+    <None Include="lib/_._" Pack="true" PackagePath="lib/net10.0/" />
+    <None Include="lib/_._" Pack="true" PackagePath="lib/net9.0/" />
+    <None Include="lib/_._" Pack="true" PackagePath="lib/net8.0/" />
+    <None Include="lib/_._" Pack="true" PackagePath="lib/netstandard2.0/" />
+    <None Include="lib/_._" Pack="true" PackagePath="lib/net48/" />
     
     <None Include="../LICENSE" Pack="true" PackagePath="/" />
+    <None Include="../README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 </Project>
