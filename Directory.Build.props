@@ -1,0 +1,18 @@
+<Project>
+  <PropertyGroup>
+    <Authors>Stanisław Nieradko &lt;stanislaw@nieradko.com&gt;</Authors>
+    <Copyright>Copyright © $([System.DateTime]::Now.Year) Stanisław Nieradko</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/KanarekLife/TypstInterop</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/KanarekLife/TypstInterop</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>typst;pdf;interop;native</PackageTags>
+    <Description>A high-performance .NET interop library for Typst, providing a native bridge to the Typst compilation engine.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Version>1.0.0-preview.1</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

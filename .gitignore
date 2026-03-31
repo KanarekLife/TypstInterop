@@ -1,0 +1,25 @@
+# .NET
+[Bb]in/
+[Oo]bj/
+*.user
+*.userosscache
+*.sln.docstates
+.vs/
+
+# Rust
+target/
+Cargo.lock
+
+# OS
+.DS_Store
+Thumbs.db
+
+# User
+.idea/
+.vscode/
+.gemini/
+
+*.pdf
+BenchmarkDotNet.Artifacts/
+TypstInterop/runtimes/
+nupkg/

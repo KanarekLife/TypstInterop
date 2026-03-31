@@ -1,0 +1,121 @@
+name: Promote Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Part of version to bump'
+        type: choice
+        required: true
+        default: 'patch'
+        options:
+          - patch
+          - minor
+          - major
+          - release
+      prerelease:
+        description: 'Prerelease suffix (e.g. preview, alpha, beta). Use "none" for stable release.'
+        type: string
+        default: 'none'
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate New Version
+        id: versioning
+        shell: python
+        run: |
+          import os
+          import re
+
+          def get_current_version():
+              with open('Directory.Build.props', 'r') as f:
+                  content = f.read()
+                  match = re.search(r'<Version>([^<]+)</Version>', content)
+                  if match:
+                      return match.group(1)
+              return "0.1.0"
+
+          current = get_current_version()
+          bump = os.environ['BUMP']
+          pre_type = os.environ['PRERELEASE']
+
+          print(f"Current version: {current}")
+
+          # Parse base version X.Y.Z
+          base_match = re.match(r'^(\d+)\.(\d+)\.(\d+)', current)
+          if not base_match:
+              # Fallback if current version is unusual
+              major, minor, patch = 1, 0, 0
+          else:
+              major, minor, patch = map(int, base_match.groups())
+          
+          # Parse current prerelease
+          pre_parts = current.split('-', 1)
+          current_pre = pre_parts[1] if len(pre_parts) > 1 else None
+
+          if bump == 'major':
+              major += 1
+              minor = 0
+              patch = 0
+          elif bump == 'minor':
+              minor += 1
+              patch = 0
+          elif bump == 'patch':
+              patch += 1
+          elif bump == 'release':
+              pass
+
+          new_base = f"{major}.{minor}.{patch}"
+          
+          if pre_type.lower() == 'none':
+              new_version = new_base
+          else:
+              num = 1
+              if current_pre and current_pre.startswith(pre_type):
+                  num_match = re.search(r'(\d+)$', current_pre)
+                  if num_match:
+                      num = int(num_match.group(1)) + 1
+              new_version = f"{new_base}-{pre_type}.{num}"
+
+          print(f"New version: {new_version}")
+          
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"new_version={new_version}\n")
+              f.write(f"current_version={current}\n")
+        env:
+          BUMP: ${{ github.event.inputs.bump }}
+          PRERELEASE: ${{ github.event.inputs.prerelease }}
+
+      - name: Update Files
+        run: |
+          NEW_VER=${{ steps.versioning.outputs.new_version }}
+          CUR_VER=${{ steps.versioning.outputs.current_version }}
+          
+          echo "Updating files from $CUR_VER to $NEW_VER"
+          
+          # Update Directory.Build.props
+          # We use a specific pattern to only match the Version tag
+          sed -i "s|<Version>$CUR_VER</Version>|<Version>$NEW_VER</Version>|" Directory.Build.props
+          
+          # Update Cargo.toml (sync version)
+          # We update the first occurrence of version = "..."
+          RUST_CUR=$(grep -m1 "version =" typst_interop/Cargo.toml | cut -d '\"' -f2)
+          sed -i "0,/version = \"$RUST_CUR\"/s//version = \"$NEW_VER\"/" typst_interop/Cargo.toml
+
+      - name: Commit and Push
+        run: |
+          VERSION=${{ steps.versioning.outputs.new_version }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Directory.Build.props typst_interop/Cargo.toml
+          git commit -m "chore: promote to v$VERSION"
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin main --follow-tags

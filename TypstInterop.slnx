@@ -1,0 +1,10 @@
+<Solution>
+  <Project Path="TypstInterop/TypstInterop.csproj" />
+  <Folder Name="/examples/">
+    <Project Path="examples/TypstInterop.Example.Net10/TypstInterop.Example.Net10.csproj" />
+    <Project Path="examples/TypstInterop.Example.Net8/TypstInterop.Example.Net8.csproj" />
+    <Project Path="examples/TypstInterop.Example.Net48/TypstInterop.Example.Net48.csproj" />
+  </Folder>
+  <Project Path="TypstInterop.Benchmarks/TypstInterop.Benchmarks.csproj" />
+  <Project Path="TypstInterop.Tests/TypstInterop.Tests.csproj" />
+</Solution>

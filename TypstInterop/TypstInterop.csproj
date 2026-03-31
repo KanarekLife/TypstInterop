@@ -1,0 +1,89 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net8.0;net9.0;netstandard2.0;net48</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    
+    <!-- Runtime identifiers for NuGet packaging -->
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
+
+    <!-- Auto-build rust by default -->
+    <BuildRust Condition="'$(BuildRust)' == ''">true</BuildRust>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0' or '$(TargetFramework)' == 'net48'">
+    <PackageReference Include="System.Memory" Version="4.6.0" />
+    <PackageReference Include="System.Buffers" Version="4.6.0" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
+  </ItemGroup>
+
+  <Target Name="BuildRust" BeforeTargets="BeforeBuild" Condition="'$(BuildRust)' == 'true'">
+    <PropertyGroup>
+      <CargoConfig Condition="'$(Configuration)' == 'Release'">--release</CargoConfig>
+      <RustOutputDir Condition="'$(Configuration)' == 'Release'">release</RustOutputDir>
+      <RustOutputDir Condition="'$(Configuration)' != 'Release'">debug</RustOutputDir>
+      
+      <!-- Detect native extension based on platform -->
+      <NativeExt Condition="$([MSBuild]::IsOSPlatform('Windows'))">.dll</NativeExt>
+      <NativeExt Condition="$([MSBuild]::IsOSPlatform('Linux'))">.so</NativeExt>
+      <NativeExt Condition="$([MSBuild]::IsOSPlatform('OSX'))">.dylib</NativeExt>
+      
+      <NativePrefix Condition="!$([MSBuild]::IsOSPlatform('Windows'))">lib</NativePrefix>
+      <NativePrefix Condition="$([MSBuild]::IsOSPlatform('Windows'))"></NativePrefix>
+      
+      <!-- Target architecture logic -->
+      <RustTargetArg Condition="'$(RuntimeIdentifier)' != ''">--target $(RustTarget)</RustTargetArg>
+    </PropertyGroup>
+
+    <Message Importance="high" Text="Building Rust library (Configuration: $(Configuration))..." />
+    
+    <Exec
+      Command="cargo build $(CargoConfig)"
+      WorkingDirectory="..\typst_interop"
+      IgnoreStandardErrorWarningFormat="true"
+      Condition="'$(RuntimeIdentifier)' == ''"
+    />
+    
+    <!-- Handle specific RID builds (useful for CI) -->
+    <Exec
+      Command="cargo build $(CargoConfig) --target $(RustTarget)"
+      WorkingDirectory="..\typst_interop"
+      IgnoreStandardErrorWarningFormat="true"
+      Condition="'$(RuntimeIdentifier)' != '' and '$(RustTarget)' != ''"
+    />
+
+    <!-- RID mapping for copy logic -->
+    <PropertyGroup>
+      <BuildRID Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</BuildRID>
+      <BuildRID Condition="'$(BuildRID)' == '' and $([MSBuild]::IsOSPlatform('Windows'))">win-x64</BuildRID>
+      <BuildRID Condition="'$(BuildRID)' == '' and $([MSBuild]::IsOSPlatform('Linux'))">linux-x64</BuildRID>
+      <BuildRID Condition="'$(BuildRID)' == '' and $([MSBuild]::IsOSPlatform('OSX'))">osx-x64</BuildRID>
+      
+      <ActualRustTargetDir Condition="'$(RustTarget)' == ''">..\typst_interop\target\$(RustOutputDir)</ActualRustTargetDir>
+      <ActualRustTargetDir Condition="'$(RustTarget)' != ''">..\typst_interop\target\$(RustTarget)\$(RustOutputDir)</ActualRustTargetDir>
+    </PropertyGroup>
+
+    <MakeDir Directories="runtimes\$(BuildRID)\native" />
+    <Copy
+      SourceFiles="$(ActualRustTargetDir)\$(NativePrefix)typst_interop$(NativeExt)"
+      DestinationFolder="runtimes\$(BuildRID)\native"
+      SkipUnchangedFiles="true"
+    />
+    
+    <!-- Copy to output for local debugging -->
+    <Copy
+      SourceFiles="$(ActualRustTargetDir)\$(NativePrefix)typst_interop$(NativeExt)"
+      DestinationFolder="$(OutputPath)"
+      SkipUnchangedFiles="true"
+    />
+  </Target>
+
+  <ItemGroup>
+    <Content Include="runtimes\**\*.*">
+      <PackagePath>runtimes</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+</Project>
