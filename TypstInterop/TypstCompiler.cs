@@ -137,7 +137,7 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
         ReadOnlySpan<char> text,
         Encoding? encoding)
     {
-        if (path.EndsWith(".typ".AsSpan(), StringComparison.OrdinalIgnoreCase)) 
+        if (path.EndsWith(".typ".AsSpan(), StringComparison.OrdinalIgnoreCase))
             return WithSourceInternal(path, text);
         var bytes = (encoding ?? Encoding.UTF8).GetBytes(text.ToArray());
         return ((ITypstConfigurator)this).WithFile(path, bytes.AsSpan());

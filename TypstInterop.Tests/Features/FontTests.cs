@@ -285,7 +285,7 @@ public class FontTests
         // we can check if it behaves as expected.
         // Actually, Typst often warns but succeeds with fallbacks if ANY font is available.
         // If NO fonts are available, it might fail.
-        
+
         // Let's check the behavior.
         if (!result.IsSuccess)
         {
