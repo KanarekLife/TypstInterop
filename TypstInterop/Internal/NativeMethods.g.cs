@@ -21,42 +21,133 @@ namespace TypstInterop.Internal
         [DllImport(__DllName, EntryPoint = "typst_version", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern byte* typst_version();
 
+        /// <summary>
+        ///  Create a new VfsWorld.
+        ///
+        ///  # Safety
+        ///
+        ///  The `main_path`, `cache_path`, and `data_path` must be valid C strings if not null.
+        /// </summary>
         [DllImport(__DllName, EntryPoint = "typst_context_new", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern VfsWorld* typst_context_new(byte* main_path, byte packages_source, byte fonts_source, byte* cache_path, byte* data_path);
 
+        /// <summary>
+        ///  Free a VfsWorld.
+        ///
+        ///  # Safety
+        ///
+        ///  The `world` pointer must be a valid pointer created by `typst_context_new`.
+        /// </summary>
         [DllImport(__DllName, EntryPoint = "typst_context_free", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void typst_context_free(VfsWorld* world);
 
+        /// <summary>
+        ///  Reset a VfsWorld.
+        ///
+        ///  # Safety
+        ///
+        ///  The `world` pointer must be a valid pointer to a `VfsWorld`.
+        /// </summary>
         [DllImport(__DllName, EntryPoint = "typst_context_reset", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void typst_context_reset(VfsWorld* world);
 
+        /// <summary>
+        ///  Set a source file in the VfsWorld.
+        ///
+        ///  # Safety
+        ///
+        ///  The `world` pointer must be valid. `path` and `text` must be valid C strings.
+        /// </summary>
         [DllImport(__DllName, EntryPoint = "typst_set_source", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void typst_set_source(VfsWorld* world, byte* path, byte* text);
 
+        /// <summary>
+        ///  Set a binary file in the VfsWorld.
+        ///
+        ///  # Safety
+        ///
+        ///  The `world` pointer must be valid. `path` must be a valid C string. `data` must be a valid buffer of `data_len` bytes.
+        /// </summary>
         [DllImport(__DllName, EntryPoint = "typst_set_file", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void typst_set_file(VfsWorld* world, byte* path, byte* data, size_t data_len);
 
+        /// <summary>
+        ///  Add a font to the VfsWorld.
+        ///
+        ///  # Safety
+        ///
+        ///  The `world` pointer must be valid. `data` must be a valid buffer of `data_len` bytes.
+        /// </summary>
         [DllImport(__DllName, EntryPoint = "typst_add_font", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void typst_add_font(VfsWorld* world, byte* data, size_t data_len);
 
+        /// <summary>
+        ///  Set an input variable in the VfsWorld.
+        ///
+        ///  # Safety
+        ///
+        ///  The `world` pointer must be valid. `key` and `value` must be valid C strings.
+        /// </summary>
         [DllImport(__DllName, EntryPoint = "typst_set_input", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void typst_set_input(VfsWorld* world, byte* key, byte* value);
 
+        /// <summary>
+        ///  Set package paths in the VfsWorld.
+        ///
+        ///  # Safety
+        ///
+        ///  The `world` pointer must be valid. `cache` and `data` must be valid C strings if not null.
+        /// </summary>
         [DllImport(__DllName, EntryPoint = "typst_set_package_paths", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void typst_set_package_paths(VfsWorld* world, byte* cache, byte* data);
 
+        /// <summary>
+        ///  Set a package source file in the VfsWorld.
+        ///
+        ///  # Safety
+        ///
+        ///  The `world` pointer must be valid. `package_spec`, `path`, and `text` must be valid C strings.
+        /// </summary>
         [DllImport(__DllName, EntryPoint = "typst_set_package_source", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern int typst_set_package_source(VfsWorld* world, byte* package_spec, byte* path, byte* text);
 
+        /// <summary>
+        ///  Set a package binary file in the VfsWorld.
+        ///
+        ///  # Safety
+        ///
+        ///  The `world` pointer must be valid. `package_spec` and `path` must be valid C strings. `data` must be a valid buffer of `data_len` bytes.
+        /// </summary>
         [DllImport(__DllName, EntryPoint = "typst_set_package_file", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern int typst_set_package_file(VfsWorld* world, byte* package_spec, byte* path, byte* data, size_t data_len);
 
+        /// <summary>
+        ///  Compile a document to PDF.
+        ///
+        ///  # Safety
+        ///
+        ///  The `world` pointer must be valid.
+        /// </summary>
         [DllImport(__DllName, EntryPoint = "typst_compile_pdf", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern CompilationResult typst_compile_pdf(VfsWorld* world);
 
+        /// <summary>
+        ///  Free PDF data.
+        ///
+        ///  # Safety
+        ///
+        ///  `ptr` must be a pointer returned in a `CompilationResult` and `len` must be the same length.
+        /// </summary>
         [DllImport(__DllName, EntryPoint = "typst_free_pdf", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void typst_free_pdf(byte* ptr, size_t len);
 
+        /// <summary>
+        ///  Free a string.
+        ///
+        ///  # Safety
+        ///
+        ///  `ptr` must be a pointer to a string returned by an FFI function.
+        /// </summary>
         [DllImport(__DllName, EntryPoint = "typst_free_string", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void typst_free_string(byte* ptr);
 

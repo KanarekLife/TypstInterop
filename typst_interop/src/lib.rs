@@ -88,11 +88,11 @@ impl VfsWorld {
         let main_id = FileId::new(None, VirtualPath::new(main_path));
 
         let (fonts, book) = match fonts_source {
-            0 => (&*GLOBAL_FONTS).clone(),                         // All
-            1 => (&*EMBEDDED_FONTS).clone(),                       // DefaultOnly
-            2 => (&*SYSTEM_ONLY_FONTS).clone(),                    // SystemOnly
+            0 => (*GLOBAL_FONTS).clone(),                          // All
+            1 => (*EMBEDDED_FONTS).clone(),                        // DefaultOnly
+            2 => (*SYSTEM_ONLY_FONTS).clone(),                     // SystemOnly
             3 | 4 => (Vec::new(), LazyHash::new(FontBook::new())), // ProvidedOnly or None
-            _ => (&*GLOBAL_FONTS).clone(),
+            _ => (*GLOBAL_FONTS).clone(),
         };
 
         let inputs = Dict::new();
@@ -126,11 +126,11 @@ impl VfsWorld {
         self.library = LazyHash::new(library);
 
         let (fonts, book) = match self.fonts_source {
-            0 => (&*GLOBAL_FONTS).clone(),                         // All
-            1 => (&*EMBEDDED_FONTS).clone(),                       // DefaultOnly
-            2 => (&*SYSTEM_ONLY_FONTS).clone(),                    // SystemOnly
+            0 => (*GLOBAL_FONTS).clone(),                          // All
+            1 => (*EMBEDDED_FONTS).clone(),                        // DefaultOnly
+            2 => (*SYSTEM_ONLY_FONTS).clone(),                     // SystemOnly
             3 | 4 => (Vec::new(), LazyHash::new(FontBook::new())), // ProvidedOnly or None
-            _ => (&*GLOBAL_FONTS).clone(),
+            _ => (*GLOBAL_FONTS).clone(),
         };
         self.fonts = fonts;
         self.book = book;
@@ -248,7 +248,7 @@ impl World for VfsWorld {
 
         let path = self.resolve_real_path(id)?;
         let text = std::fs::read_to_string(&path).map_err(|e| FileError::from_io(e, &path))?;
-        Ok(Source::new(id, text.into()))
+        Ok(Source::new(id, text))
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
@@ -296,8 +296,13 @@ pub extern "C" fn typst_version() -> *mut c_char {
     CString::new(version).unwrap().into_raw()
 }
 
+/// Create a new VfsWorld.
+///
+/// # Safety
+///
+/// The `main_path`, `cache_path`, and `data_path` must be valid C strings if not null.
 #[unsafe(no_mangle)]
-pub extern "C" fn typst_context_new(
+pub unsafe extern "C" fn typst_context_new(
     main_path: *const c_char,
     packages_source: u8,
     fonts_source: u8,
@@ -330,29 +335,53 @@ pub extern "C" fn typst_context_new(
     Box::into_raw(Box::new(world))
 }
 
+/// Free a VfsWorld.
+///
+/// # Safety
+///
+/// The `world` pointer must be a valid pointer created by `typst_context_new`.
 #[unsafe(no_mangle)]
-pub extern "C" fn typst_context_free(world: *mut VfsWorld) {
+pub unsafe extern "C" fn typst_context_free(world: *mut VfsWorld) {
     if !world.is_null() {
         unsafe { drop(Box::from_raw(world)) };
     }
 }
 
+/// Reset a VfsWorld.
+///
+/// # Safety
+///
+/// The `world` pointer must be a valid pointer to a `VfsWorld`.
 #[unsafe(no_mangle)]
-pub extern "C" fn typst_context_reset(world: *mut VfsWorld) {
+pub unsafe extern "C" fn typst_context_reset(world: *mut VfsWorld) {
     let world = unsafe { &mut *world };
     world.reset();
 }
 
+/// Set a source file in the VfsWorld.
+///
+/// # Safety
+///
+/// The `world` pointer must be valid. `path` and `text` must be valid C strings.
 #[unsafe(no_mangle)]
-pub extern "C" fn typst_set_source(world: *mut VfsWorld, path: *const c_char, text: *const c_char) {
+pub unsafe extern "C" fn typst_set_source(
+    world: *mut VfsWorld,
+    path: *const c_char,
+    text: *const c_char,
+) {
     let world = unsafe { &mut *world };
     let path = unsafe { CStr::from_ptr(path).to_str().unwrap() };
     let text = unsafe { CStr::from_ptr(text).to_str().unwrap() };
     world.set_source(path, text);
 }
 
+/// Set a binary file in the VfsWorld.
+///
+/// # Safety
+///
+/// The `world` pointer must be valid. `path` must be a valid C string. `data` must be a valid buffer of `data_len` bytes.
 #[unsafe(no_mangle)]
-pub extern "C" fn typst_set_file(
+pub unsafe extern "C" fn typst_set_file(
     world: *mut VfsWorld,
     path: *const c_char,
     data: *const c_uchar,
@@ -364,23 +393,46 @@ pub extern "C" fn typst_set_file(
     world.set_file(path, data);
 }
 
+/// Add a font to the VfsWorld.
+///
+/// # Safety
+///
+/// The `world` pointer must be valid. `data` must be a valid buffer of `data_len` bytes.
 #[unsafe(no_mangle)]
-pub extern "C" fn typst_add_font(world: *mut VfsWorld, data: *const c_uchar, data_len: size_t) {
+pub unsafe extern "C" fn typst_add_font(
+    world: *mut VfsWorld,
+    data: *const c_uchar,
+    data_len: size_t,
+) {
     let world = unsafe { &mut *world };
     let data = unsafe { std::slice::from_raw_parts(data, data_len).to_vec() };
     world.add_font(data);
 }
 
+/// Set an input variable in the VfsWorld.
+///
+/// # Safety
+///
+/// The `world` pointer must be valid. `key` and `value` must be valid C strings.
 #[unsafe(no_mangle)]
-pub extern "C" fn typst_set_input(world: *mut VfsWorld, key: *const c_char, value: *const c_char) {
+pub unsafe extern "C" fn typst_set_input(
+    world: *mut VfsWorld,
+    key: *const c_char,
+    value: *const c_char,
+) {
     let world = unsafe { &mut *world };
     let key = unsafe { CStr::from_ptr(key).to_str().unwrap() };
     let value = unsafe { CStr::from_ptr(value).to_str().unwrap() };
     world.set_input(key, value);
 }
 
+/// Set package paths in the VfsWorld.
+///
+/// # Safety
+///
+/// The `world` pointer must be valid. `cache` and `data` must be valid C strings if not null.
 #[unsafe(no_mangle)]
-pub extern "C" fn typst_set_package_paths(
+pub unsafe extern "C" fn typst_set_package_paths(
     world: *mut VfsWorld,
     cache: *const c_char,
     data: *const c_char,
@@ -403,8 +455,13 @@ pub extern "C" fn typst_set_package_paths(
     world.set_package_paths(cache, data);
 }
 
+/// Set a package source file in the VfsWorld.
+///
+/// # Safety
+///
+/// The `world` pointer must be valid. `package_spec`, `path`, and `text` must be valid C strings.
 #[unsafe(no_mangle)]
-pub extern "C" fn typst_set_package_source(
+pub unsafe extern "C" fn typst_set_package_source(
     world: *mut VfsWorld,
     package_spec: *const c_char,
     path: *const c_char,
@@ -424,8 +481,13 @@ pub extern "C" fn typst_set_package_source(
     }
 }
 
+/// Set a package binary file in the VfsWorld.
+///
+/// # Safety
+///
+/// The `world` pointer must be valid. `package_spec` and `path` must be valid C strings. `data` must be a valid buffer of `data_len` bytes.
 #[unsafe(no_mangle)]
-pub extern "C" fn typst_set_package_file(
+pub unsafe extern "C" fn typst_set_package_file(
     world: *mut VfsWorld,
     package_spec: *const c_char,
     path: *const c_char,
@@ -454,8 +516,13 @@ pub struct CompilationResult {
     pub error_message: *mut c_char,
 }
 
+/// Compile a document to PDF.
+///
+/// # Safety
+///
+/// The `world` pointer must be valid.
 #[unsafe(no_mangle)]
-pub extern "C" fn typst_compile_pdf(world: *mut VfsWorld) -> CompilationResult {
+pub unsafe extern "C" fn typst_compile_pdf(world: *mut VfsWorld) -> CompilationResult {
     let world = unsafe { &mut *world };
 
     match typst::compile(world).output {
@@ -499,15 +566,25 @@ pub extern "C" fn typst_compile_pdf(world: *mut VfsWorld) -> CompilationResult {
     }
 }
 
+/// Free PDF data.
+///
+/// # Safety
+///
+/// `ptr` must be a pointer returned in a `CompilationResult` and `len` must be the same length.
 #[unsafe(no_mangle)]
-pub extern "C" fn typst_free_pdf(ptr: *mut c_uchar, len: size_t) {
+pub unsafe extern "C" fn typst_free_pdf(ptr: *mut c_uchar, len: size_t) {
     if !ptr.is_null() {
-        unsafe { Vec::from_raw_parts(ptr, len, len) };
+        unsafe { drop(Vec::from_raw_parts(ptr, len, len)) };
     }
 }
 
+/// Free a string.
+///
+/// # Safety
+///
+/// `ptr` must be a pointer to a string returned by an FFI function.
 #[unsafe(no_mangle)]
-pub extern "C" fn typst_free_string(ptr: *mut c_char) {
+pub unsafe extern "C" fn typst_free_string(ptr: *mut c_char) {
     if !ptr.is_null() {
         unsafe {
             let _ = CString::from_raw(ptr);

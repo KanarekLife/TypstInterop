@@ -24,7 +24,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -107,7 +107,7 @@ jobs:
           
           # Update Cargo.toml (sync version)
           # We update the first occurrence of version = "..."
-          RUST_CUR=$(grep -m1 "version =" typst_interop/Cargo.toml | cut -d '\"' -f2)
+          RUST_CUR=$(grep -m1 "version =" typst_interop/Cargo.toml | cut -d '"' -f2)
           sed -i "0,/version = \"$RUST_CUR\"/s//version = \"$NEW_VER\"/" typst_interop/Cargo.toml
 
       - name: Commit and Push
@@ -119,3 +119,10 @@ jobs:
           git commit -m "chore: promote to v$VERSION"
           git tag -a "v$VERSION" -m "Release v$VERSION"
           git push origin main --follow-tags
+
+      - name: Trigger Build and Pack
+        run: |
+          VERSION=${{ steps.versioning.outputs.new_version }}
+          gh workflow run build-and-pack.yml --ref "v$VERSION" -f publish=true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

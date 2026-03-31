@@ -1,34 +1,37 @@
 # TypstInterop
 
-A high-performance .NET interop library for [Typst](https://typst.app/), providing a native bridge to the Typst compilation engine.
+TypstInterop is a high-performance .NET bridge for [Typst](https://typst.app/), the modern document markup language. It provides a native, low-latency interface to the Typst compilation engine, allowing you to generate professional PDFs directly from your C# applications without external dependencies or CLI wrappers.
 
-## Features
+While many libraries struggle with legacy support, TypstInterop is built for the entire .NET ecosystem. It offers first-class support for **.NET Framework 4.8** alongside modern **.NET 8, 9, and 10**. Whether you are maintaining a reliable enterprise system or building a cutting-edge cloud service, TypstInterop provides a consistent and powerful experience.
 
-- **Native Performance**: Direct FFI calls to a Rust-based Typst wrapper.
-- **Cross-Platform**: Supports Windows, Linux, and macOS (x64 and ARM64).
-- **Fluent API**: Easy-to-use builder pattern for compilation jobs.
-- **VFS Support**: Compile from memory, streams, or disk.
-- **Package Management**: Integrated support for Typst packages.
-- **Multi-Target**: Supports .NET Framework 4.8, .NET 8.0, 9.0, and 10.0.
-
-## Installation
-
-```bash
-dotnet add package TypstInterop
-```
+We are committed to true cross-platform development. TypstInterop fully supports **Windows, Linux, and macOS** on both **x64 and ARM64** architectures. From Windows Server to Apple Silicon M-series chips and Linux-based Docker containers, your document generation will work seamlessly everywhere.
 
 ## Quick Start
+
+You can compile documents entirely in memory, provide custom assets (like images or data files), and pass dynamic inputs into your Typst templates with a simple, fluent API.
 
 ```csharp
 using TypstInterop;
 
-// Simple compilation
+// The compiler is disposable and manages the native Typst engine life-cycle
 using var compiler = new TypstCompiler();
-var result = compiler.Compile(c => c.WithSource("= Hello from Typst!"));
+
+var result = compiler.Compile(c => c
+    .WithSource(@"
+        #import ""header.typ"": project_title
+        = #project_title
+        Hello #sys.inputs.user!
+        #image(""logo.png"", width: 20%)
+    ")
+    .WithSource("header.typ", " #let project_title = [Automated Report] ")
+    .WithFile("logo.png", File.ReadAllBytes("assets/logo.png"))
+    .WithInput("user", "Developer"));
 
 if (result.IsSuccess)
 {
-    File.WriteAllBytes("output.pdf", result.GetBytes());
+    // Access the raw PDF bytes
+    byte[] pdf = result.GetBytes();
+    File.WriteAllBytes("report.pdf", pdf);
 }
 else
 {
@@ -36,48 +39,14 @@ else
 }
 ```
 
-### Advanced Usage (with assets)
+## Installation
 
-```csharp
-using var compiler = new TypstCompiler();
-var result = compiler.Compile(c => c
-    .WithSource(@"
-        #import ""logo.png""
-        = Project Report
-        Hello #sys.inputs.name!
-    ")
-    .WithFile("logo.png", File.ReadAllBytes("logo.png"))
-    .WithInput("name", "John Doe"));
+Add the library to your project via NuGet:
 
-if (result.IsSuccess)
-{
-    File.WriteAllBytes("output.pdf", result.GetBytes());
-}
-```
-
-## Building
-
-The project uses a hybrid build system (Rust + .NET).
-
-### Prerequisites
-- [Rust toolchain](https://rustup.rs/)
-- [.NET SDK (8.0+)](https://dotnet.microsoft.com/download)
-
-### Local Development
-To build the project for your current platform:
 ```bash
-dotnet build
-```
-
-### Multi-Platform Packaging
-The project includes a GitHub Actions workflow that automatically builds native binaries for all supported platforms (Windows, Linux, macOS) and bundles them into a single NuGet package.
-
-To manually build for a specific platform:
-```bash
-# Example for Linux ARM64
-dotnet build TypstInterop/TypstInterop.csproj -c Release -r linux-arm64 -p:RustTarget=aarch64-unknown-linux-gnu
+dotnet add package TypstInterop
 ```
 
 ## License
 
-MIT
+This project is licensed under the MIT License.

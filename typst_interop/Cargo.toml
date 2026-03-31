@@ -1,7 +1,7 @@
 [package]
 name = "typst_interop"
 authors = ["Stanisław Nieradko <stanislaw@nieradko.com>"]
-version = "1.0.0-alpha.1"
+version = "1.0.0"
 edition = "2024"
 repository = "https://github.com/KanarekLife/TypstInterop"
 documentation = "https://github.com/KanarekLife/TypstInterop"
