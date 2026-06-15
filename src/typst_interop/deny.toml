@@ -1,0 +1,45 @@
+# cargo-deny configuration for the typst_interop crate.
+#
+# Schema: cargo-deny v2 (cargo-deny >= 0.18). CI runs the full `cargo deny check`
+# (advisories + bans + licenses + sources) — see .github/workflows/security.yml.
+# The license allow-list below was validated against the committed Cargo.lock.
+
+[advisories]
+# Security vulnerabilities and unsound advisories always fail the check; use the
+# `ignore` list (with a rationale) to suppress a specific advisory if needed.
+ignore = []
+# Only flag unmaintained crates that are workspace members. The Typst dependency
+# tree pulls in transitively unmaintained crates (e.g. paste, yaml-rust) that we
+# cannot drop on our own, so checking the whole tree would block every PR.
+unmaintained = "workspace"
+# Surface yanked crates without hard-failing.
+yanked = "warn"
+
+[bans]
+# Multiple versions of the same crate are common deep in the Typst/image/font
+# stack; surface them without blocking.
+multiple-versions = "warn"
+wildcards = "warn"
+
+[licenses]
+# Permissive / copyleft-lite allow-list. Unlisted licenses fail `check licenses`.
+# Validated locally against the current dependency tree.
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "Unicode-DFS-2016",
+  "Zlib",
+  "MPL-2.0",
+  "OFL-1.1",
+  "CC0-1.0",
+]
+confidence-threshold = 0.8
+
+[sources]
+unknown-registry = "warn"
+unknown-git = "warn"

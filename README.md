@@ -1,52 +1,57 @@
 # TypstInterop
 
-TypstInterop is a high-performance .NET bridge for [Typst](https://typst.app/), the modern document markup language. It provides a native, low-latency interface to the Typst compilation engine, allowing you to generate professional PDFs directly from your C# applications without external dependencies or CLI wrappers.
+[![NuGet](https://img.shields.io/nuget/v/TypstInterop.svg)](https://www.nuget.org/packages/TypstInterop/)
+[![Build and Pack](https://github.com/KanarekLife/TypstInterop/actions/workflows/build-and-pack.yml/badge.svg)](https://github.com/KanarekLife/TypstInterop/actions/workflows/build-and-pack.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-While many libraries struggle with legacy support, TypstInterop is built for the entire .NET ecosystem. It offers first-class support for **.NET Framework 4.8** alongside modern **.NET 8, 9, and 10**. Whether you are maintaining a reliable enterprise system or building a cutting-edge cloud service, TypstInterop provides a consistent and powerful experience.
+TypstInterop is a high-performance .NET bridge for [Typst](https://typst.app/), the modern document markup language. It links the Typst compilation engine directly into your process, so you can generate PDFs, images, and HTML from C# without shelling out to a CLI or depending on external services.
 
-We are committed to true cross-platform development. TypstInterop fully supports **Windows, Linux, and macOS** on both **x64 and ARM64** architectures. From Windows Server to Apple Silicon M-series chips and Linux-based Docker containers, your document generation will work seamlessly everywhere.
+It currently embeds **Typst 0.15.0** and targets **.NET 8, 9, 10** and **.NET Framework 4.8**, on Windows, Linux, and macOS (x64/arm64; .NET Framework is Windows-only).
 
-## Quick Start
+## Features
 
-You can compile documents entirely in memory, provide custom assets (like images or data files), and pass dynamic inputs into your Typst templates with a simple, fluent API.
-
-```csharp
-using TypstInterop;
-
-// The compiler is disposable and manages the native Typst engine life-cycle
-using var compiler = new TypstCompiler();
-
-var result = compiler.Compile(c => c
-    .WithSource(@"
-        #import ""header.typ"": project_title
-        = #project_title
-        Hello #sys.inputs.user!
-        #image(""logo.png"", width: 20%)
-    ")
-    .WithSource("header.typ", " #let project_title = [Automated Report] ")
-    .WithFile("logo.png", File.ReadAllBytes("assets/logo.png"))
-    .WithInput("user", "Developer"));
-
-if (result.IsSuccess)
-{
-    // Access the raw PDF bytes
-    byte[] pdf = result.GetBytes();
-    File.WriteAllBytes("report.pdf", pdf);
-}
-else
-{
-    Console.WriteLine($"Compilation failed: {result.ErrorMessage}");
-}
-```
+- In-memory compilation to **PDF, PNG, SVG, or HTML**.
+- Fluent API for sources, assets, fonts, inputs, and mocked packages.
+- PDF options (PDF/A, metadata, reproducible timestamps) and structured diagnostics.
+- Deterministic and offline-capable — control or disable package/font resolution.
 
 ## Installation
-
-Add the library to your project via NuGet:
 
 ```bash
 dotnet add package TypstInterop
 ```
 
+## Quick Start
+
+```csharp
+using TypstInterop;
+
+// The compiler is disposable and owns the native Typst engine life-cycle.
+using var compiler = new TypstCompiler();
+
+var result = compiler.Compile(c => c
+    .WithSource("= Hello #sys.inputs.user!")
+    .WithInput("user", "Developer"));
+
+if (result.IsSuccess)
+    File.WriteAllBytes("report.pdf", result.GetBytes());
+else
+    Console.WriteLine($"Compilation failed: {result.ErrorMessage}");
+```
+
+## Documentation
+
+Full guides live in the [`wiki/`](wiki/home.md) folder:
+
+- [Getting Started](wiki/getting-started.md) — install and compile your first document.
+- [Output Formats](wiki/output-formats.md) — PDF/PNG/SVG/HTML and PDF options.
+- [Configuration](wiki/configuration.md) — package/font sources, cache paths, offline builds.
+- [Diagnostics & Error Handling](wiki/diagnostics.md) — errors and warnings.
+- [Project Root & Fonts](wiki/project-root-and-fonts.md) — on-disk projects and font listing.
+- [Examples](wiki/examples.md) — inputs, fonts, assets, and package mocking.
+- [Building From Source](wiki/building-from-source.md) — toolchain and tests.
+- [Benchmarks](wiki/benchmarks.md) — performance vs. other Typst .NET wrappers.
+
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the [MIT License](LICENSE).

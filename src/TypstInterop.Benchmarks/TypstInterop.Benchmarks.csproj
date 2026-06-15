@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\TypstInterop\TypstInterop.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net10.0;net48</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="System.Memory" Version="4.6.3" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
+  </ItemGroup>
+
+  <!-- Competitor: typstsharp (https://github.com/evolvedlight/typstsharp).
+       Scoped to net10.0 only: the package targets net8.0/9.0/10.0 and ships
+       native (P/Invoke) binaries, so it is not usable on net48. The
+       HAS_TYPSTSHARP symbol guards CompetitorBenchmarks.cs - drop this
+       ItemGroup and the suite still builds/runs without the competitor rows.
+
+       The version is overridable (-p:TypstSharpVersion=0.14.1) so you can
+       compare across typstsharp releases - see wiki/Benchmarks.md for the
+       exact command.
+       Default is 0.14.2: it is the most recent release that ships a
+       linux-x64 native binary. The very latest, 0.14.2.2, regressed to
+       shipping ONLY win-x64, so it cannot execute on Linux/macOS. Versions
+       known to ship linux-x64 + win-x64: 0.14.2, 0.14.1, 0.0.8.
+       The FromSource(source, fonts, sysInputs, root) API used here is stable
+       across 0.14.1 / 0.14.2 / 0.14.2.2. -->
+  <PropertyGroup>
+    <TypstSharpVersion Condition="'$(TypstSharpVersion)' == ''">0.14.2</TypstSharpVersion>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="typstsharp" Version="$(TypstSharpVersion)" />
+  </ItemGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <DefineConstants>$(DefineConstants);HAS_TYPSTSHARP</DefineConstants>
+  </PropertyGroup>
+</Project>

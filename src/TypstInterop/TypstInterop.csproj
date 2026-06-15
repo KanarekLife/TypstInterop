@@ -1,0 +1,99 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net8.0;net9.0;netstandard2.0;net48</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
+    <BuildRust Condition="'$(BuildRust)' == ''">true</BuildRust>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.300" PrivateAssets="All" />
+  </ItemGroup>
+
+  <!-- Emitted only when packing; consumers get the matching native runtime package. -->
+  <ItemGroup Condition="'$(PackRuntimeDependencies)' == 'true'">
+    <PackageReference Include="TypstInterop.runtime.win-x64" Version="$(Version)" />
+    <PackageReference Include="TypstInterop.runtime.win-arm64" Version="$(Version)" />
+    <PackageReference Include="TypstInterop.runtime.linux-x64" Version="$(Version)" />
+    <PackageReference Include="TypstInterop.runtime.linux-arm64" Version="$(Version)" />
+    <PackageReference Include="TypstInterop.runtime.osx-x64" Version="$(Version)" />
+    <PackageReference Include="TypstInterop.runtime.osx-arm64" Version="$(Version)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0' or '$(TargetFramework)' == 'net48'">
+    <PackageReference Include="System.Memory" Version="4.6.3" />
+    <PackageReference Include="System.Buffers" Version="4.6.1" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
+  </ItemGroup>
+
+  <Target Name="BuildRust" BeforeTargets="BeforeBuild" Condition="'$(BuildRust)' == 'true'">
+    <PropertyGroup>
+      <CargoConfig Condition="'$(Configuration)' == 'Release'">--release</CargoConfig>
+      <RustOutputDir Condition="'$(Configuration)' == 'Release'">release</RustOutputDir>
+      <RustOutputDir Condition="'$(Configuration)' != 'Release'">debug</RustOutputDir>
+
+      <NativeExt Condition="$([MSBuild]::IsOSPlatform('Windows'))">.dll</NativeExt>
+      <NativeExt Condition="$([MSBuild]::IsOSPlatform('Linux'))">.so</NativeExt>
+      <NativeExt Condition="$([MSBuild]::IsOSPlatform('OSX'))">.dylib</NativeExt>
+
+      <NativePrefix Condition="!$([MSBuild]::IsOSPlatform('Windows'))">lib</NativePrefix>
+      <NativePrefix Condition="$([MSBuild]::IsOSPlatform('Windows'))"></NativePrefix>
+
+      <RustTargetArg Condition="'$(RuntimeIdentifier)' != ''">--target $(RustTarget)</RustTargetArg>
+    </PropertyGroup>
+
+    <Message Importance="high" Text="Building Rust library (Configuration: $(Configuration))..." />
+
+    <Exec
+      Command="cargo build $(CargoConfig)"
+      WorkingDirectory="..\typst_interop"
+      IgnoreStandardErrorWarningFormat="true"
+      Condition="'$(RuntimeIdentifier)' == ''"
+    />
+
+    <Exec
+      Command="cargo build $(CargoConfig) --target $(RustTarget)"
+      WorkingDirectory="..\typst_interop"
+      IgnoreStandardErrorWarningFormat="true"
+      Condition="'$(RuntimeIdentifier)' != '' and '$(RustTarget)' != ''"
+    />
+
+    <PropertyGroup>
+      <BuildRID Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</BuildRID>
+      <BuildRID Condition="'$(BuildRID)' == '' and $([MSBuild]::IsOSPlatform('Windows'))">win-x64</BuildRID>
+      <BuildRID Condition="'$(BuildRID)' == '' and $([MSBuild]::IsOSPlatform('Linux'))">linux-x64</BuildRID>
+      <BuildRID Condition="'$(BuildRID)' == '' and $([MSBuild]::IsOSPlatform('OSX'))">osx-x64</BuildRID>
+
+      <ActualRustTargetDir Condition="'$(RustTarget)' == ''">..\typst_interop\target\$(RustOutputDir)</ActualRustTargetDir>
+      <ActualRustTargetDir Condition="'$(RustTarget)' != ''">..\typst_interop\target\$(RustTarget)\$(RustOutputDir)</ActualRustTargetDir>
+    </PropertyGroup>
+
+    <MakeDir Directories="runtimes\$(BuildRID)\native" />
+    <Copy
+      SourceFiles="$(ActualRustTargetDir)\$(NativePrefix)typst_interop$(NativeExt)"
+      DestinationFolder="runtimes\$(BuildRID)\native"
+      SkipUnchangedFiles="true"
+    />
+
+    <Copy
+      SourceFiles="$(ActualRustTargetDir)\$(NativePrefix)typst_interop$(NativeExt)"
+      DestinationFolder="$(OutputPath)"
+      SkipUnchangedFiles="true"
+    />
+
+    <!-- Registered inside the target (after the file exists) so it flows to
+         ProjectReference consumers under the runtimes/<rid>/native/ layout that
+         NativeLibraryLoader probes, avoiding the evaluation-time glob ordering trap. -->
+    <ItemGroup>
+      <None Include="runtimes\$(BuildRID)\native\$(NativePrefix)typst_interop$(NativeExt)">
+        <Link>runtimes\$(BuildRID)\native\$(NativePrefix)typst_interop$(NativeExt)</Link>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <Pack>false</Pack>
+        <Visible>false</Visible>
+      </None>
+    </ItemGroup>
+  </Target>
+</Project>

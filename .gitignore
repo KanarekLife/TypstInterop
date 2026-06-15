@@ -8,7 +8,9 @@
 
 # Rust
 target/
-Cargo.lock
+# Cargo.lock is committed: this crate builds a native cdylib artifact (not a
+# published library), so a pinned lockfile gives reproducible CI builds and lets
+# Renovate maintain transitive dependency versions.
 
 # OS
 .DS_Store
@@ -21,5 +23,5 @@ Thumbs.db
 
 *.pdf
 BenchmarkDotNet.Artifacts/
-TypstInterop/runtimes/
+src/TypstInterop/runtimes/
 nupkg/

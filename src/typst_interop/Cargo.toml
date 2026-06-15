@@ -1,0 +1,45 @@
+[package]
+name = "typst_interop"
+authors = ["Stanisław Nieradko <stanislaw@nieradko.com>"]
+version = "1.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/KanarekLife/TypstInterop"
+documentation = "https://github.com/KanarekLife/TypstInterop"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+typst = "0.15.0"
+typst-pdf = "0.15.0"
+typst-render = "0.15.0"
+typst-svg = "0.15.0"
+typst-html = "0.15.0"
+typst-layout = "0.15.0"
+typst-kit = { version = "0.15.0", features = ["embedded-fonts", "scan-fonts", "system-downloader", "system-packages", "universe-packages", "vendor-openssl"] }
+# Must match the comemo version pulled in transitively by typst, so that
+# `comemo::evict` operates on the same global memoization cache typst uses.
+comemo = "0.5"
+libc = "0.2"
+chrono = { version = "0.4", features = ["clock"] }
+
+[build-dependencies]
+csbindgen = "1.9"
+
+[profile.release]
+# Optimized for binary size (smaller distributed runtime packages). Note this
+# trades away throughput on the compile hot path; build with the
+# `release-speed` profile below when runtime speed matters more than size.
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# Speed-favoring variant of the release profile for the compiler hot path.
+# Same link-time settings as `release`, but optimizes for speed (`opt-level=3`)
+# at the cost of a larger binary. Build with `--profile release-speed`.
+[profile.release-speed]
+inherits = "release"
+opt-level = 3

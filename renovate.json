@@ -1,6 +1,52 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "labels": ["dependencies"],
+  "minimumReleaseAge": "14 days",
+  "internalChecksFilter": "strict",
+  "prHourlyLimit": 0,
+  "prConcurrentLimit": 10,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on monday"]
+  },
+  "packageRules": [
+    {
+      "description": "Bump the entire Typst crate family together; they share a version and must stay in lockstep.",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["typst", "typst-pdf", "typst-kit"],
+      "groupName": "typst"
+    },
+    {
+      "description": "Group the .NET test toolchain into a single PR.",
+      "matchManagers": ["nuget"],
+      "matchPackageNames": [
+        "xunit",
+        "xunit.runner.visualstudio",
+        "Microsoft.NET.Test.Sdk",
+        "coverlet.collector"
+      ],
+      "groupName": "dotnet test dependencies"
+    },
+    {
+      "description": "Group the .NET Framework / netstandard compatibility shims.",
+      "matchManagers": ["nuget"],
+      "matchPackageNames": [
+        "System.Memory",
+        "System.Buffers",
+        "System.Runtime.CompilerServices.Unsafe"
+      ],
+      "groupName": "dotnet compatibility shims"
+    },
+    {
+      "description": "Group GitHub Actions updates.",
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions"
+    }
   ]
 }
