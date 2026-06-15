@@ -7,9 +7,14 @@
     <RepositoryUrl>https://github.com/KanarekLife/TypstInterop</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>typst;pdf;interop;native</PackageTags>
-    <Description>A high-performance .NET interop library for Typst, providing a native bridge to the Typst compilation engine.</Description>
+    <Title>TypstInterop</Title>
+    <Version>1.1.0</Version>
+
+    <!-- Keep in sync with the typst crate version in typst_interop/Cargo.toml
+         and typst_version() in src/lib.rs. -->
+    <TypstVersion>0.15.0</TypstVersion>
+    <Description>A high-performance .NET interop library for Typst $(TypstVersion), providing a native bridge to the Typst compilation engine. Generate PDFs from Typst markup in .NET 8/9/10 across Windows, Linux, and macOS (x64/arm64), plus .NET Framework 4.8 on Windows.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <Version>1.0.1</Version>
 
     <!-- SourceLink and Deterministic Builds -->
     <PublishRepositoryUrl>true</PublishRepositoryUrl>

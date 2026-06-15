@@ -1,0 +1,156 @@
+name: Security
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  codeql:
+    name: CodeQL (C#)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@b0c4fd77f6c559021d78430ec4d0d169ae74a4eb # v3
+        with:
+          languages: csharp
+
+      - name: Build (managed only)
+        run: dotnet build src/TypstInterop/TypstInterop.csproj -c Release -p:BuildRust=false
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@b0c4fd77f6c559021d78430ec4d0d169ae74a4eb # v3
+
+  rust-audit:
+    name: Rust dependency audit
+    runs-on: ubuntu-latest
+    # Runs in the official Rust image (Docker official image) for a reproducible
+    # toolchain. This job only needs Rust, so no dual-toolchain image is needed.
+    container: rust:slim
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      # Rust stable is already provided by the rust:slim image. Building
+      # cargo-audit from source needs a C toolchain and pkg-config.
+      - name: Install build prerequisites
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends build-essential pkg-config git
+
+      - name: Cache cargo-audit
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: cargo-audit-bin
+
+      - name: Install cargo-audit
+        run: command -v cargo-audit || cargo install cargo-audit --locked
+
+      - name: Audit
+        run: cargo audit
+        working-directory: src/typst_interop
+
+  dotnet-vulnerable:
+    name: .NET vulnerable packages
+    runs-on: ubuntu-latest
+    # Runs in the official .NET SDK image for a reproducible toolchain. The 10.0
+    # SDK is baked in; setup-dotnet adds 8.0 and 9.0 so the version set matches
+    # the rest of CI. BuildRust=false everywhere here, so no Rust is needed.
+    container: mcr.microsoft.com/dotnet/sdk:10.0
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Restore
+        run: dotnet restore TypstInterop.slnx -p:BuildRust=false
+
+      - name: Check for vulnerable packages
+        run: |
+          dotnet list TypstInterop.slnx package --vulnerable --include-transitive 2>&1 | tee vulnerable.txt
+          if grep -q "has the following vulnerable" vulnerable.txt; then
+            echo "::error::Vulnerable NuGet packages detected."
+            exit 1
+          fi
+
+  cargo-deny:
+    name: Cargo deny (advisories + bans)
+    runs-on: ubuntu-latest
+    # Mirrors the rust-audit job: runs in the official Rust image for a
+    # reproducible toolchain. This job only needs Rust.
+    container: rust:slim
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      # Rust stable is already provided by the rust:slim image. Building
+      # cargo-deny from source needs a C toolchain and pkg-config.
+      - name: Install build prerequisites
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends build-essential pkg-config git
+
+      - name: Cache cargo-deny
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cargo/bin/cargo-deny
+          key: cargo-deny-bin
+
+      - name: Install cargo-deny
+        run: command -v cargo-deny || cargo install cargo-deny --locked
+
+      # Full check: advisories, bans, licenses, and sources. The license
+      # allow-list in deny.toml was validated against the committed Cargo.lock.
+      - name: Cargo deny check
+        run: cargo deny --manifest-path src/typst_interop/Cargo.toml check
+
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    # Dependency review only operates on the diff of a pull request.
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          # GHSA-cq8v-f236-94qc: rand 0.8.5 is "unsound with a custom logger using
+          # rand::rng()" (low severity). It is pulled in transitively through the
+          # Typst dependency tree, our usage does not trigger it, and cargo-audit +
+          # cargo-deny are the authoritative Rust advisory gates. Re-evaluate when
+          # Typst updates its rand dependency.
+          allow-ghsas: GHSA-cq8v-f236-94qc

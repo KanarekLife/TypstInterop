@@ -13,94 +13,281 @@ on:
         type: boolean
         default: false
 
+# Cancel superseded runs on the same ref (but never cancel tag/publish runs).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+
+permissions:
+  contents: read
+
 jobs:
+  # Builds the dual-toolchain (.NET SDK + Rust) CI image from docker/ci.Dockerfile
+  # and pushes it to GHCR so the Linux jobs below can run inside it. The same
+  # image can be built and run locally to reproduce the lint/test environment
+  # (see docker/ci.Dockerfile for instructions). Uses only the standard `docker`
+  # CLI and the built-in GITHUB_TOKEN -- no third-party actions.
+  ci-image:
+    name: Build CI Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Compute image reference
+        id: meta
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          # Tag the image by the Dockerfile hash so it is rebuilt only when the
+          # toolchain definition changes and is otherwise pulled from cache.
+          tag="$(sha256sum docker/ci.Dockerfile | cut -c1-12)"
+          echo "image=ghcr.io/${owner}/typstinterop-ci:${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push
+        # Untrusted fork PRs receive a read-only GITHUB_TOKEN and cannot push to
+        # GHCR, so only attempt the build-and-push when the run is not a fork PR
+        # (i.e. push/tag/dispatch, or a PR from a branch in this same repo). The
+        # downstream containerized jobs only need `packages: read` and can still
+        # pull the already-published image on fork PRs.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          image="${{ steps.meta.outputs.image }}"
+          if docker manifest inspect "$image" >/dev/null 2>&1; then
+            echo "Image $image already exists; skipping build."
+          else
+            docker build -f docker/ci.Dockerfile -t "$image" .
+            docker push "$image"
+          fi
+
   lint:
     name: Lint and Format
+    needs: ci-image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ${{ needs.ci-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
+      # The .NET 10 SDK is baked into the image. setup-dotnet still pins the
+      # exact channel so the version set stays consistent with the rest of CI.
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
         with:
           dotnet-version: '10.0.x'
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      # Rust (stable + rustfmt/clippy) is preinstalled in the CI image.
+
+      - name: Cache Cargo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          components: rustfmt
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            src/typst_interop/target
+          key: ${{ runner.os }}-cargo-host-${{ hashFiles('src/typst_interop/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-host-
 
       - name: Check C# Formatting
         run: dotnet format --verify-no-changes --verbosity diagnostic
 
       - name: Check Rust Formatting
         run: cargo fmt --all -- --check
-        working-directory: typst_interop
+        working-directory: src/typst_interop
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+        working-directory: src/typst_interop
+
+  test:
+    name: Test
+    needs: [ci-image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ${{ needs.ci-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      # The .NET 10 SDK is baked into the image; setup-dotnet adds 8.0.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      # Rust (stable) is preinstalled in the CI image.
+
+      - name: Cache Cargo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            src/typst_interop/target
+          key: ${{ runner.os }}-cargo-host-${{ hashFiles('src/typst_interop/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-host-
+
+      # The test build compiles the native library via the BuildRust target and
+      # exercises the FFI. Only the .NET (Core) TFMs are run here: net48 tests
+      # require Mono on Linux, and net48 compilation is already covered by the
+      # full-solution build in the pack job. Integration tests hit the network
+      # (Typst Universe) and are excluded to keep the gate deterministic.
+      - name: Run tests
+        run: |
+          dotnet test src/TypstInterop.Tests/TypstInterop.Tests.csproj -f net10.0 --filter "FullyQualifiedName!~Integration"
+          dotnet test src/TypstInterop.Tests/TypstInterop.Tests.csproj -f net8.0 --filter "FullyQualifiedName!~Integration"
 
   build-native:
     name: Build Native (${{ matrix.rid }})
-    needs: lint
+    needs: [ci-image, lint, test]
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      packages: read
+      # Required to generate SLSA build-provenance attestations for the native
+      # binaries via OIDC.
+      id-token: write
+      attestations: write
+    # The Linux RIDs run inside the dual-toolchain CI image for a reproducible
+    # toolchain; the Windows/macOS RIDs cannot run in a Linux container, so they
+    # build directly on their runners (matrix.container is empty for them, which
+    # Actions treats as "no container").
+    container:
+      image: ${{ matrix.container }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
             rid: win-x64
             target: x86_64-pc-windows-msvc
+            container: ''
           - os: windows-latest
             rid: win-arm64
             target: aarch64-pc-windows-msvc
+            container: ''
           - os: ubuntu-latest
             rid: linux-x64
             target: x86_64-unknown-linux-gnu
+            container: ${{ needs.ci-image.outputs.image }}
           - os: ubuntu-latest
             rid: linux-arm64
             target: aarch64-unknown-linux-gnu
+            container: ${{ needs.ci-image.outputs.image }}
           - os: macos-latest
             rid: osx-x64
             target: x86_64-apple-darwin
+            container: ''
           - os: macos-latest
             rid: osx-arm64
             target: aarch64-apple-darwin
+            container: ''
 
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          targets: ${{ matrix.target }}
+          persist-credentials: false
 
-      - name: Install ARM64 Linker (Linux)
-        if: matrix.rid == 'linux-arm64'
+      # On the non-containerized (Windows/macOS) runners Rust is not present, so
+      # install it. On the Linux runners the CI image already has stable + the
+      # aarch64 target + cross linker, so this step is skipped.
+      - name: Set up Rust
+        if: matrix.container == ''
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add ${{ matrix.target }}
+
+      - name: Cache Cargo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            src/typst_interop/target
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('src/typst_interop/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-${{ matrix.target }}-
+
+      # The aarch64 cross linker is baked into the Linux CI image; on a bare
+      # ubuntu runner (none currently) it would be installed here instead.
+      - name: Install ARM64 Linker (Linux, non-container)
+        if: matrix.rid == 'linux-arm64' && matrix.container == ''
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+          sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross
 
       - name: Build Native Library
         run: |
-          dotnet build TypstInterop/TypstInterop.csproj -c Release -r ${{ matrix.rid }} -p:RustTarget=${{ matrix.target }}
+          dotnet build src/TypstInterop/TypstInterop.csproj -c Release -r ${{ matrix.rid }} -p:RustTarget=${{ matrix.target }}
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
+      - name: Attest Native Binary Provenance
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: src/TypstInterop/runtimes/${{ matrix.rid }}/native/*
+
       - name: Upload Native Binary
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: native-${{ matrix.rid }}
-          path: TypstInterop/runtimes/${{ matrix.rid }}/native/*
+          path: src/TypstInterop/runtimes/${{ matrix.rid }}/native/*
 
   pack:
     name: Pack NuGet
-    needs: build-native
+    needs: [ci-image, build-native]
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      packages: write
+      contents: read
+      packages: read
+      # Required to generate SLSA build-provenance attestations for the packed
+      # NuGet packages via OIDC.
+      id-token: write
+      attestations: write
+    container:
+      image: ${{ needs.ci-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
+      # The .NET 10 SDK is baked into the image; setup-dotnet adds 8.0 and 9.0.
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
         with:
           dotnet-version: |
             8.0.x
@@ -108,68 +295,187 @@ jobs:
             10.0.x
 
       - name: Download All Native Binaries
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: artifacts
 
       - name: Organize Runtimes
         run: |
-          mkdir -p TypstInterop/runtimes/win-x64/native
-          mkdir -p TypstInterop/runtimes/win-arm64/native
-          mkdir -p TypstInterop/runtimes/linux-x64/native
-          mkdir -p TypstInterop/runtimes/linux-arm64/native
-          mkdir -p TypstInterop/runtimes/osx-x64/native
-          mkdir -p TypstInterop/runtimes/osx-arm64/native
-          
-          cp artifacts/native-win-x64/* TypstInterop/runtimes/win-x64/native/
-          cp artifacts/native-win-arm64/* TypstInterop/runtimes/win-arm64/native/
-          cp artifacts/native-linux-x64/* TypstInterop/runtimes/linux-x64/native/
-          cp artifacts/native-linux-arm64/* TypstInterop/runtimes/linux-arm64/native/
-          cp artifacts/native-osx-x64/* TypstInterop/runtimes/osx-x64/native/
-          cp artifacts/native-osx-arm64/* TypstInterop/runtimes/osx-arm64/native/
-          
+          for rid in win-x64 win-arm64 linux-x64 linux-arm64 osx-x64 osx-arm64; do
+            mkdir -p "src/TypstInterop/runtimes/$rid/native"
+            cp artifacts/native-$rid/* "src/TypstInterop/runtimes/$rid/native/"
+          done
+
           echo "Verifying organized runtimes structure:"
-          ls -R TypstInterop/runtimes
+          ls -R src/TypstInterop/runtimes
 
       - name: Build and Pack Runtimes
         run: |
           for rid in win-x64 win-arm64 linux-x64 linux-arm64 osx-x64 osx-arm64; do
-            dotnet pack TypstInterop.Runtime/TypstInterop.Runtime.csproj -c Release -p:RuntimeIdentifier=$rid -p:BuildRust=false -p:NoBuild=true --output ./nupkg
+            dotnet pack src/TypstInterop.Runtime/TypstInterop.Runtime.csproj -c Release -p:RuntimeIdentifier=$rid -p:BuildRust=false -p:NoBuild=true --output ./nupkg
           done
 
       - name: Build and Pack Main
         run: |
           dotnet build TypstInterop.slnx -c Release -p:BuildRust=false
-          dotnet pack TypstInterop/TypstInterop.csproj -c Release -p:BuildRust=false -p:PackRuntimeDependencies=true --output ./nupkg --source ./nupkg --source https://api.nuget.org/v3/index.json
+          dotnet pack src/TypstInterop/TypstInterop.csproj -c Release -p:BuildRust=false -p:PackRuntimeDependencies=true --output ./nupkg --source ./nupkg --source https://api.nuget.org/v3/index.json
+
+      - name: Attest NuGet Package Provenance
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: ./nupkg/*
 
       - name: Upload NuGet Package
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: nuget-package
           path: ./nupkg/*
 
+  publish-nuget:
+    name: Publish to NuGet
+    needs: pack
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: nuget
+      url: https://www.nuget.org/packages/TypstInterop
+    steps:
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download NuGet Package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: nuget-package
+          path: nupkg
+
       - name: Push to NuGet
-        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'true'
-        run: |
-          dotnet nuget push ./nupkg/* --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        run: dotnet nuget push ./nupkg/* --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
 
+  publish-github-packages:
+    name: Publish to GitHub Packages
+    needs: pack
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    environment:
+      name: github-packages
+      url: https://github.com/${{ github.repository }}/packages
+    steps:
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download NuGet Package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: nuget-package
+          path: nupkg
+
       - name: Push to GitHub Packages
-        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'true'
-        run: |
-          dotnet nuget push ./nupkg/* --api-key ${{ secrets.GITHUB_TOKEN }} --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json --skip-duplicate
+        run: dotnet nuget push ./nupkg/* --api-key "$GITHUB_TOKEN" --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json --skip-duplicate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'true'
-        uses: softprops/action-gh-release@v2
+  sbom:
+    name: Generate SBOMs
+    needs: [ci-image, pack]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ${{ needs.ci-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          files: ./nupkg/*
-          generate_release_notes: true
-          draft: false
-          prerelease: ${{ contains(github.ref, '-') }}
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          persist-credentials: false
+
+      # The .NET 10 SDK is baked into the image; Rust (stable) is preinstalled.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache Cargo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            src/typst_interop/target
+          key: ${{ runner.os }}-cargo-host-${{ hashFiles('src/typst_interop/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-host-
+
+      - name: Generate Rust SBOM (CycloneDX)
+        run: |
+          cargo install cargo-cyclonedx --locked
+          cargo cyclonedx --format json
+        working-directory: src/typst_interop
+
+      - name: Generate .NET SBOM (CycloneDX)
+        run: |
+          dotnet tool install --global CycloneDX
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet restore src/TypstInterop/TypstInterop.csproj
+          dotnet CycloneDX src/TypstInterop/TypstInterop.csproj --json --output ./sbom --filename sbom-dotnet.json
+
+      - name: Collect SBOMs
+        run: |
+          mkdir -p sbom
+          find src/typst_interop -maxdepth 1 -name '*.cdx.json' -exec cp {} sbom/sbom-rust.json \;
+          ls -la sbom
+
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom
+          path: sbom/*
+
+  release:
+    name: Create GitHub Release
+    needs: [publish-nuget, publish-github-packages, sbom]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download NuGet Package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: nuget-package
+          path: nupkg
+
+      - name: Download SBOMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: sbom
+          path: sbom
+
+      - name: Generate SHA256 checksums
+        run: |
+          # Checksum every release artifact (nupkgs + SBOMs) into a single
+          # SHA256SUMS file that ships alongside them so consumers can verify
+          # integrity of what they download from the release.
+          sha256sum ./nupkg/* ./sbom/* > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PRERELEASE=""
+          if [[ "${{ github.ref_name }}" == *-* ]]; then PRERELEASE="--prerelease"; fi
+          gh release create "${{ github.ref_name }}" ./nupkg/* ./sbom/* SHA256SUMS \
+            --title "${{ github.ref_name }}" \
+            --generate-notes $PRERELEASE
