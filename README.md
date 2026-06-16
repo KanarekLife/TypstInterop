@@ -1,12 +1,13 @@
 # TypstInterop
 
 [![NuGet](https://img.shields.io/nuget/v/TypstInterop.svg)](https://www.nuget.org/packages/TypstInterop/)
+[![Typst](https://img.shields.io/badge/Typst-0.15.0-239dad.svg)](https://github.com/typst/typst/releases/tag/v0.15.0)
 [![Build and Pack](https://github.com/KanarekLife/TypstInterop/actions/workflows/build-and-pack.yml/badge.svg)](https://github.com/KanarekLife/TypstInterop/actions/workflows/build-and-pack.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 TypstInterop is a high-performance .NET bridge for [Typst](https://typst.app/), the modern document markup language. It links the Typst compilation engine directly into your process, so you can generate PDFs, images, and HTML from C# without shelling out to a CLI or depending on external services.
 
-It currently embeds **Typst 0.15.0** and targets **.NET 8, 9, 10** and **.NET Framework 4.8**, on Windows, Linux, and macOS (x64/arm64; .NET Framework is Windows-only).
+It currently embeds **Typst 0.15.0** and targets **.NET 8, 9, 10** and **.NET Framework 4.8**, on Windows, Linux (glibc and musl/Alpine), and macOS (x64/arm64; .NET Framework is Windows-only).
 
 ## Features
 
@@ -34,7 +35,7 @@ var result = compiler.Compile(c => c
     .WithInput("user", "Developer"));
 
 if (result.IsSuccess)
-    File.WriteAllBytes("report.pdf", result.GetBytes());
+    File.WriteAllBytes("report.pdf", result.Output.ToArray());
 else
     Console.WriteLine($"Compilation failed: {result.ErrorMessage}");
 ```

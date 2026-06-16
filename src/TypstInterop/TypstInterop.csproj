@@ -1,11 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net10.0;net8.0;net9.0;netstandard2.0;net48</TargetFrameworks>
+    <!-- netstandard2.0: baseline (legacy loader). net8.0: modern NativeLibrary
+         resolver, also serves net9/net10. net48: scopes deps to Windows runtimes. -->
+    <TargetFrameworks>netstandard2.0;net8.0;net48</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
-    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- .NET Framework on Windows can never load the linux/osx natives. -->
+    <RuntimeIdentifiers Condition="'$(TargetFramework)' != 'net48'">win-x64;win-arm64;linux-x64;linux-arm64;linux-musl-x64;linux-musl-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifiers Condition="'$(TargetFramework)' == 'net48'">win-x64;win-arm64</RuntimeIdentifiers>
     <BuildRust Condition="'$(BuildRust)' == ''">true</BuildRust>
   </PropertyGroup>
 
@@ -13,15 +18,29 @@
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.300" PrivateAssets="All" />
   </ItemGroup>
 
-  <!-- Emitted only when packing; consumers get the matching native runtime package. -->
-  <ItemGroup Condition="'$(PackRuntimeDependencies)' == 'true'">
-    <PackageReference Include="TypstInterop.runtime.win-x64" Version="$(Version)" />
-    <PackageReference Include="TypstInterop.runtime.win-arm64" Version="$(Version)" />
-    <PackageReference Include="TypstInterop.runtime.linux-x64" Version="$(Version)" />
-    <PackageReference Include="TypstInterop.runtime.linux-arm64" Version="$(Version)" />
-    <PackageReference Include="TypstInterop.runtime.osx-x64" Version="$(Version)" />
-    <PackageReference Include="TypstInterop.runtime.osx-arm64" Version="$(Version)" />
-  </ItemGroup>
+  <!-- A runtime.json RID graph (packed at the package root) makes each runtime
+       package a RID-conditional dependency, so consumers restore only the native
+       for their own platform instead of all of them. -->
+  <Target Name="GenerateRuntimeJson" BeforeTargets="GenerateNuspec;_GetPackageFiles"
+          Condition="'$(PackRuntimeDependencies)' == 'true'">
+    <PropertyGroup>
+      <RuntimeJsonPath>$(IntermediateOutputPath)runtime.json</RuntimeJsonPath>
+    </PropertyGroup>
+    <ItemGroup>
+      <_RuntimeRid Include="win-x64;win-arm64;linux-x64;linux-arm64;linux-musl-x64;linux-musl-arm64;osx-x64;osx-arm64" />
+      <_RuntimeRidJson Include="@(_RuntimeRid)">
+        <Json>    "%(Identity)": { "TypstInterop": { "TypstInterop.runtime.%(Identity)": "$(Version)" } }</Json>
+      </_RuntimeRidJson>
+    </ItemGroup>
+    <PropertyGroup>
+      <_RuntimeRidJoined>@(_RuntimeRidJson->'%(Json)', ',%0a')</_RuntimeRidJoined>
+      <RuntimeJsonContent>{%0a  "runtimes": {%0a$(_RuntimeRidJoined)%0a  }%0a}</RuntimeJsonContent>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(RuntimeJsonPath)" Lines="$(RuntimeJsonContent)" Overwrite="true" />
+    <ItemGroup>
+      <None Include="$(RuntimeJsonPath)" Pack="true" PackagePath="runtime.json" Visible="false" />
+    </ItemGroup>
+  </Target>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0' or '$(TargetFramework)' == 'net48'">
     <PackageReference Include="System.Memory" Version="4.6.3" />
@@ -42,7 +61,11 @@
       <NativePrefix Condition="!$([MSBuild]::IsOSPlatform('Windows'))">lib</NativePrefix>
       <NativePrefix Condition="$([MSBuild]::IsOSPlatform('Windows'))"></NativePrefix>
 
-      <RustTargetArg Condition="'$(RuntimeIdentifier)' != ''">--target $(RustTarget)</RustTargetArg>
+      <!-- CI sets CargoCommand=zigbuild and RustTargetSuffix=.2.28 for the
+           linux-gnu RIDs so cargo-zigbuild pins a glibc 2.28 floor. The suffix
+           applies only to the cargo target arg; the output dir stays the base
+           triple (cargo-zigbuild drops the version suffix there). -->
+      <CargoCommand Condition="'$(CargoCommand)' == ''">build</CargoCommand>
     </PropertyGroup>
 
     <Message Importance="high" Text="Building Rust library (Configuration: $(Configuration))..." />
@@ -55,7 +78,7 @@
     />
 
     <Exec
-      Command="cargo build $(CargoConfig) --target $(RustTarget)"
+      Command="cargo $(CargoCommand) $(CargoConfig) --target $(RustTarget)$(RustTargetSuffix)"
       WorkingDirectory="..\typst_interop"
       IgnoreStandardErrorWarningFormat="true"
       Condition="'$(RuntimeIdentifier)' != '' and '$(RustTarget)' != ''"

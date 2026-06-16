@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -8,7 +9,7 @@ namespace TypstInterop.Models;
 /// </summary>
 public readonly struct TypstCompilationResult
 {
-    private readonly IReadOnlyList<byte[]>? _outputs;
+    private readonly IReadOnlyList<TypstOutput>? _outputs;
     private readonly IReadOnlyList<TypstDiagnostic>? _diagnostics;
 
     /// <summary>
@@ -37,7 +38,21 @@ public readonly struct TypstCompilationResult
     /// Gets the produced outputs. A PDF or HTML compilation yields a single
     /// element; PNG and SVG compilations yield one element per page.
     /// </summary>
-    public IReadOnlyList<byte[]> Outputs => _outputs ?? [];
+    public IReadOnlyList<TypstOutput> Outputs => _outputs ?? [];
+
+    /// <summary>
+    /// Gets the single (or first) produced output — the PDF/HTML document or the
+    /// first rendered page.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The compilation produced no output (for example, it failed). Check
+    /// <see cref="IsSuccess"/> and <see cref="Diagnostics"/> first.
+    /// </exception>
+    public TypstOutput Output =>
+        Outputs.Count > 0
+            ? Outputs[0]
+            : throw new InvalidOperationException(
+                "The compilation produced no output. Inspect IsSuccess and Diagnostics.");
 
     /// <summary>
     /// Gets the concatenated error messages if the compilation failed; otherwise, null.
@@ -49,7 +64,7 @@ public readonly struct TypstCompilationResult
 
     private TypstCompilationResult(
         bool success,
-        IReadOnlyList<byte[]>? outputs,
+        IReadOnlyList<TypstOutput>? outputs,
         IReadOnlyList<TypstDiagnostic>? diagnostics)
     {
         IsSuccess = success;
@@ -61,7 +76,7 @@ public readonly struct TypstCompilationResult
     /// Creates a successful compilation result.
     /// </summary>
     internal static TypstCompilationResult Success(
-        IReadOnlyList<byte[]> outputs,
+        IReadOnlyList<TypstOutput> outputs,
         IReadOnlyList<TypstDiagnostic> diagnostics) => new(true, outputs, diagnostics);
 
     /// <summary>
@@ -69,17 +84,4 @@ public readonly struct TypstCompilationResult
     /// </summary>
     internal static TypstCompilationResult Failure(IReadOnlyList<TypstDiagnostic> diagnostics) =>
         new(false, null, diagnostics);
-
-    /// <summary>
-    /// Gets a <see cref="Stream"/> containing the first output (e.g. the PDF or
-    /// the first rendered page), or <see cref="Stream.Null"/> if there is none.
-    /// </summary>
-    public Stream GetStream() =>
-        Outputs.Count > 0 ? new MemoryStream(Outputs[0]) : Stream.Null;
-
-    /// <summary>
-    /// Gets the first output as a byte array (e.g. the PDF or the first rendered
-    /// page), or an empty array if there is none.
-    /// </summary>
-    public byte[] GetBytes() => Outputs.Count > 0 ? Outputs[0] : [];
 }

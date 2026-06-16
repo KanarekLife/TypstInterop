@@ -12,20 +12,22 @@ namespace TypstInterop.Abstractions;
 public interface ITypstCompiler : IDisposable
 {
     /// <summary>
-    /// Executes the compilation to PDF and returns the result.
-    /// State added via <see cref="ITypstConfigurator"/> is reset before each call.
+    /// Gets the version of the underlying Typst compiler. Instance accessor for
+    /// the static <see cref="TypstInterop.TypstCompiler.TypstVersion"/>.
     /// </summary>
-    /// <param name="configure">Configuration action for this specific compilation run.</param>
-    TypstCompilationResult Compile(Action<ITypstConfigurator> configure);
+    string Version { get; }
 
     /// <summary>
-    /// Executes the compilation using the supplied options (output format,
-    /// PDF/PNG/SVG/HTML settings, document metadata) and returns the result.
+    /// Executes a compilation and returns the result. The supplied function
+    /// receives a fresh <see cref="ITypstConfigurator"/>, configures the source,
+    /// assets, and output options fluently, and returns the same builder.
     /// State added via <see cref="ITypstConfigurator"/> is reset before each call.
     /// </summary>
-    /// <param name="options">The per-compilation options.</param>
-    /// <param name="configure">Configuration action for this specific compilation run.</param>
-    TypstCompilationResult Compile(TypstCompileOptions options, Action<ITypstConfigurator> configure);
+    /// <param name="build">
+    /// A fluent configuration function for this specific compilation run. It must
+    /// return the configurator it was given (the builder pattern).
+    /// </param>
+    TypstCompilationResult Compile(Func<ITypstConfigurator, ITypstConfigurator> build);
 
     /// <summary>
     /// Lists the font family names currently available to the compiler, taking

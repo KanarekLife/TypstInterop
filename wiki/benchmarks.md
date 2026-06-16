@@ -100,7 +100,7 @@ though the **Reuse** numbers show the upside of the world-caching design.
 ### Output formats (v1.1.0)
 
 In addition to PDF, TypstInterop v1.1.0 can render a document to **PNG**,
-**SVG**, and **HTML** via `Compile(new TypstCompileOptions { Format = … }, …)`.
+**SVG**, and **HTML** via the builder's `.WithFormat(…)` method.
 PDF and HTML produce a single output element; PNG and SVG produce **one element
 per page**, all surfaced through `result.Outputs`.
 

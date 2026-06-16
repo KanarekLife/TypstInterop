@@ -22,6 +22,6 @@ public class InputTests
             ));
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
-        Assert.NotNull(result.GetBytes());
+        Assert.NotNull(result.Output.ToArray());
     }
 }

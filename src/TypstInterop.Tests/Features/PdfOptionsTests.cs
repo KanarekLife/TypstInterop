@@ -12,46 +12,41 @@ public class PdfOptionsTests
     {
         using var compiler = new TypstCompiler();
         // PDF/A requires a document date; supply one via the creation timestamp.
-        var result = compiler.Compile(
-            new TypstCompileOptions
-            {
-                PdfStandard = TypstPdfStandard.A2b,
-                CreationTimestamp = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero),
-            },
-            c => c.WithSource("#set document(date: datetime(year: 2020, month: 1, day: 1))\n= Archival"));
+        var result = compiler.Compile(c => c
+            .WithSource("#set document(date: datetime(year: 2020, month: 1, day: 1))\n= Archival")
+            .WithPdfStandard(TypstPdfStandard.A2b)
+            .WithCreationTimestamp(new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero)));
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
-        Assert.Equal(0x25, result.GetBytes()[0]);
+        Assert.Equal(0x25, result.Output.Span[0]);
     }
 
     [Fact]
     public void Compile_WithFixedTimestamp_ProducesDeterministicOutput()
     {
         using var compiler = new TypstCompiler();
-        var options = new TypstCompileOptions
-        {
-            CreationTimestamp = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero),
-        };
+        var timestamp = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-        var first = compiler.Compile(options, c => c.WithSource("= Deterministic"));
-        var second = compiler.Compile(options, c => c.WithSource("= Deterministic"));
+        var first = compiler.Compile(c => c.WithSource("= Deterministic").WithCreationTimestamp(timestamp));
+        var second = compiler.Compile(c => c.WithSource("= Deterministic").WithCreationTimestamp(timestamp));
 
         Assert.True(first.IsSuccess, first.ErrorMessage);
         Assert.True(second.IsSuccess, second.ErrorMessage);
-        Assert.Equal(first.GetBytes(), second.GetBytes());
+        Assert.Equal(first.Output.ToArray(), second.Output.ToArray());
     }
 
     [Fact]
     public void Compile_WithMetadata_EmbedsTitle()
     {
         using var compiler = new TypstCompiler();
-        var result = compiler.Compile(
-            new TypstCompileOptions { Title = "My Unique Title", Author = "Tester" },
-            c => c.WithSource("= Body"));
+        var result = compiler.Compile(c => c
+            .WithSource("= Body")
+            .WithTitle("My Unique Title")
+            .WithAuthor("Tester"));
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
         // The title appears in the PDF metadata (single-byte-encoded in the file).
-        var text = Encoding.GetEncoding("ISO-8859-1").GetString(result.GetBytes());
+        var text = Encoding.GetEncoding("ISO-8859-1").GetString(result.Output.ToArray());
         Assert.Contains("My Unique Title", text);
     }
 }

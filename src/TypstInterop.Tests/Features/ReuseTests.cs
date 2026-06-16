@@ -32,10 +32,11 @@ public class ReuseTests
                   #inputs.at("key" + str(i))
                 ]
                 """);
+            return c;
         });
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
-        Assert.NotEmpty(result.GetBytes());
+        Assert.NotEmpty(result.Output.ToArray());
     }
 
     [Fact]
@@ -54,8 +55,8 @@ public class ReuseTests
                 .WithSource("#import sys: inputs\nValue: #inputs.n"));
 
             Assert.True(result.IsSuccess, result.ErrorMessage);
-            Assert.NotEmpty(result.GetBytes());
-            Assert.Equal(0x25, result.GetBytes()[0]); // %PDF
+            Assert.NotEmpty(result.Output.ToArray());
+            Assert.Equal(0x25, result.Output.Span[0]); // %PDF
         }
     }
 
@@ -92,7 +93,7 @@ public class ReuseTests
         {
             var result = compiler.Compile(c => c.WithSource("= Heading\nSome body text."));
             Assert.True(result.IsSuccess, result.ErrorMessage);
-            Assert.NotEmpty(result.GetBytes());
+            Assert.NotEmpty(result.Output.ToArray());
         }
     }
 
@@ -123,7 +124,7 @@ public class ReuseTests
             // Pixel font (which would imply the store was not reset). We can't
             // assert glyph identity here, so we only assert the compile path
             // ran; the meaningful assertion is that it does not throw/leak.
-            Assert.NotNull(withoutFont.GetBytes());
+            Assert.NotNull(withoutFont.Output.ToArray());
         }
     }
 }

@@ -55,7 +55,7 @@ public class ReceiptTests
             ));
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
-        Assert.NotNull(result.GetBytes());
-        Assert.True(result.GetBytes().Length > 500, "Receipt PDF should have a reasonable size");
+        Assert.NotNull(result.Output.ToArray());
+        Assert.True(result.Output.Length > 500, "Receipt PDF should have a reasonable size");
     }
 }

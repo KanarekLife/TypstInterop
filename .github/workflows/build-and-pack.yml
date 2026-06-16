@@ -196,14 +196,33 @@ jobs:
             rid: win-arm64
             target: aarch64-pc-windows-msvc
             container: ''
+          # All Linux RIDs build with cargo-zigbuild. gnu RIDs add a glibc 2.28
+          # floor (via the target suffix) independent of the runner's glibc; musl
+          # RIDs need no floor. zig ships compiler-rt and a full musl sysroot, so
+          # the musl builds need no host musl-gcc/libgcc_s and still link musl
+          # libc dynamically (see -crt-static below) to load as a normal .so.
           - os: ubuntu-latest
             rid: linux-x64
             target: x86_64-unknown-linux-gnu
-            container: ${{ needs.ci-image.outputs.image }}
-          - os: ubuntu-latest
+            container: ''
+            cargo: zigbuild
+            glibc: '.2.28'
+          - os: ubuntu-24.04-arm
             rid: linux-arm64
             target: aarch64-unknown-linux-gnu
-            container: ${{ needs.ci-image.outputs.image }}
+            container: ''
+            cargo: zigbuild
+            glibc: '.2.28'
+          - os: ubuntu-latest
+            rid: linux-musl-x64
+            target: x86_64-unknown-linux-musl
+            container: ''
+            cargo: zigbuild
+          - os: ubuntu-24.04-arm
+            rid: linux-musl-arm64
+            target: aarch64-unknown-linux-musl
+            container: ''
+            cargo: zigbuild
           - os: macos-latest
             rid: osx-x64
             target: x86_64-apple-darwin
@@ -218,15 +237,21 @@ jobs:
         with:
           persist-credentials: false
 
-      # On the non-containerized (Windows/macOS) runners Rust is not present, so
-      # install it. On the Linux runners the CI image already has stable + the
-      # aarch64 target + cross linker, so this step is skipped.
+      # All native builds run on bare runners (no container), so install Rust.
       - name: Set up Rust
         if: matrix.container == ''
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
           rustup target add ${{ matrix.target }}
+
+      # zig + cargo-zigbuild link all Linux RIDs (glibc floor for gnu, musl
+      # sysroot + compiler-rt for musl).
+      - name: Install cargo-zigbuild
+        if: matrix.cargo == 'zigbuild'
+        run: |
+          python3 -m pip install --break-system-packages cargo-zigbuild ziglang
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Cache Cargo
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
@@ -239,19 +264,30 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('src/typst_interop/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-${{ matrix.target }}-
 
-      # The aarch64 cross linker is baked into the Linux CI image; on a bare
-      # ubuntu runner (none currently) it would be installed here instead.
-      - name: Install ARM64 Linker (Linux, non-container)
-        if: matrix.rid == 'linux-arm64' && matrix.container == ''
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross
-
       - name: Build Native Library
+        # Build a single TFM: the native binary is identical across all target
+        # frameworks (it depends only on the RID), and the multi-TFM managed
+        # assemblies are built later in the pack job. Compiling every TFM here
+        # would fire the BuildRust target once per inner build in parallel,
+        # racing concurrent `cargo (zig)build` invocations on the same target/
+        # dir and shared zig wrapper ("Text file busy"). One TFM = one cargo run.
+        #
+        # Force bash on every runner: Windows defaults `run:` to PowerShell,
+        # where `\` is not a line-continuation, so the multi-line command below
+        # would break apart ("-p:" parsed as a separate command).
+        shell: bash
         run: |
-          dotnet build src/TypstInterop/TypstInterop.csproj -c Release -r ${{ matrix.rid }} -p:RustTarget=${{ matrix.target }}
+          dotnet build src/TypstInterop/TypstInterop.csproj -c Release -f net8.0 -r ${{ matrix.rid }} \
+            -p:RustTarget=${{ matrix.target }} \
+            -p:CargoCommand=${{ matrix.cargo || 'build' }} \
+            -p:RustTargetSuffix=${{ matrix.glibc }}
         env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          # musl cdylibs link musl libc dynamically so they load as a normal .so
+          # on Alpine. cargo-zigbuild provides the linker (zig cc) and compiler-rt,
+          # so no musl-gcc/libgcc_s is needed -- only these RUSTFLAGS to opt out of
+          # the musl default of static linking.
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS: -C target-feature=-crt-static
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS: -C target-feature=-crt-static
 
       - name: Attest Native Binary Provenance
         uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
@@ -301,7 +337,7 @@ jobs:
 
       - name: Organize Runtimes
         run: |
-          for rid in win-x64 win-arm64 linux-x64 linux-arm64 osx-x64 osx-arm64; do
+          for rid in win-x64 win-arm64 linux-x64 linux-arm64 linux-musl-x64 linux-musl-arm64 osx-x64 osx-arm64; do
             mkdir -p "src/TypstInterop/runtimes/$rid/native"
             cp artifacts/native-$rid/* "src/TypstInterop/runtimes/$rid/native/"
           done
@@ -311,7 +347,7 @@ jobs:
 
       - name: Build and Pack Runtimes
         run: |
-          for rid in win-x64 win-arm64 linux-x64 linux-arm64 osx-x64 osx-arm64; do
+          for rid in win-x64 win-arm64 linux-x64 linux-arm64 linux-musl-x64 linux-musl-arm64 osx-x64 osx-arm64; do
             dotnet pack src/TypstInterop.Runtime/TypstInterop.Runtime.csproj -c Release -p:RuntimeIdentifier=$rid -p:BuildRust=false -p:NoBuild=true --output ./nupkg
           done
 

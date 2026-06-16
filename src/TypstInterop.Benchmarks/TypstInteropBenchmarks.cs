@@ -34,7 +34,7 @@ public class TypstInteropBenchmarks
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("TypstInterop", "Simple")]
     public byte[] Simple_Reuse() =>
-        _reusedCompiler.Compile(c => c.WithSource(Scenarios.Simple)).GetBytes();
+        _reusedCompiler.Compile(c => c.WithSource(Scenarios.Simple)).Output.ToArray();
 
     [Benchmark]
     [BenchmarkCategory("TypstInterop", "Inputs")]
@@ -43,12 +43,12 @@ public class TypstInteropBenchmarks
             .WithFile("logo.png", Scenarios.LogoPng)
             .WithInput("name", "Benchmark User")
             .WithInput("total", "$1,000.00")
-            .WithSource(Scenarios.WithInputs)).GetBytes();
+            .WithSource(Scenarios.WithInputs)).Output.ToArray();
 
     [Benchmark]
     [BenchmarkCategory("TypstInterop", "Large")]
     public byte[] Large_Reuse() =>
-        _reusedCompiler.Compile(c => c.WithSource(Scenarios.Large)).GetBytes();
+        _reusedCompiler.Compile(c => c.WithSource(Scenarios.Large)).Output.ToArray();
 
     // ---- Fresh (new compiler per compilation; cold start) ----------------
 
@@ -57,7 +57,7 @@ public class TypstInteropBenchmarks
     public byte[] Simple_Fresh()
     {
         using var compiler = new TypstCompiler();
-        return compiler.Compile(c => c.WithSource(Scenarios.Simple)).GetBytes();
+        return compiler.Compile(c => c.WithSource(Scenarios.Simple)).Output.ToArray();
     }
 
     [Benchmark]
@@ -65,6 +65,6 @@ public class TypstInteropBenchmarks
     public byte[] Large_Fresh()
     {
         using var compiler = new TypstCompiler();
-        return compiler.Compile(c => c.WithSource(Scenarios.Large)).GetBytes();
+        return compiler.Compile(c => c.WithSource(Scenarios.Large)).Output.ToArray();
     }
 }

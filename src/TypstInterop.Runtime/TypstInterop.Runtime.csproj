@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net10.0;net9.0;net8.0;netstandard2.0;net48</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0;net8.0;net48</TargetFrameworks>
     <PackageId>TypstInterop.runtime.$(RuntimeIdentifier)</PackageId>
     <Version>$(Version)</Version>
     <Authors>Stanisław Nieradko</Authors>
@@ -23,9 +23,8 @@
           Pack="true"
           PackagePath="runtimes/$(RuntimeIdentifier)/native/" />
 
-    <!-- _._ marks each TFM as compatible without shipping a managed DLL (NuGet convention). -->
-    <None Include="lib/_._" Pack="true" PackagePath="lib/net10.0/" />
-    <None Include="lib/_._" Pack="true" PackagePath="lib/net9.0/" />
+    <!-- _._ marks each TFM as compatible without shipping a managed DLL (NuGet
+         convention). net9/net10 consumers resolve to the net8.0 group. -->
     <None Include="lib/_._" Pack="true" PackagePath="lib/net8.0/" />
     <None Include="lib/_._" Pack="true" PackagePath="lib/netstandard2.0/" />
     <None Include="lib/_._" Pack="true" PackagePath="lib/net48/" />

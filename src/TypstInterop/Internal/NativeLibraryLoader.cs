@@ -162,14 +162,34 @@ internal static class NativeLibraryLoader
                 ? "win-arm64"
                 : "win-x64";
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            return RuntimeInformation.ProcessArchitecture == Architecture.Arm64
-                ? "linux-arm64"
-                : "linux-x64";
+        {
+            // musl (Alpine) natives are ABI-incompatible with the glibc ones.
+            var musl = IsMusl();
+            if (RuntimeInformation.ProcessArchitecture == Architecture.Arm64)
+                return musl ? "linux-musl-arm64" : "linux-arm64";
+            return musl ? "linux-musl-x64" : "linux-x64";
+        }
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             return RuntimeInformation.ProcessArchitecture == Architecture.Arm64
                 ? "osx-arm64"
                 : "osx-x64";
         return "unknown";
+    }
+
+    private static bool IsMusl()
+    {
+        // Alpine ships its loader as /lib/ld-musl-<arch>.so.1 and has no glibc.
+        try
+        {
+            if (File.Exists("/lib/ld-musl-x86_64.so.1"))
+                return true;
+            return Directory.Exists("/lib") &&
+                   Array.Exists(Directory.GetFiles("/lib", "ld-musl-*"), static _ => true);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static string GetNativeExtension()

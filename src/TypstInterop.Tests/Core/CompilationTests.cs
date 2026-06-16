@@ -22,10 +22,10 @@ public class CompilationTests
         var result = compiler.Compile(x => x.WithSource("= Hello World"));
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
-        Assert.NotNull(result.GetBytes());
-        Assert.NotEmpty(result.GetBytes());
-        Assert.True(result.GetBytes().Length > 100, "PDF should have some content");
-        Assert.Equal(0x25, result.GetBytes()[0]); // %
+        Assert.NotNull(result.Output.ToArray());
+        Assert.NotEmpty(result.Output.ToArray());
+        Assert.True(result.Output.Length > 100, "PDF should have some content");
+        Assert.Equal(0x25, result.Output.Span[0]); // %
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public class CompilationTests
             ));
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
-        Assert.NotNull(result.GetBytes());
+        Assert.NotNull(result.Output.ToArray());
     }
 
     [Fact]

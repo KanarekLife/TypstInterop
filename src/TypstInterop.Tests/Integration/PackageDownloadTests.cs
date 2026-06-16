@@ -38,15 +38,12 @@ public class PackageDownloadTests
                 Sum is #add(2, 3)
                 """;
             // Act
-            var result = compiler.Compile(c =>
-            {
-                c.WithSource(source.AsSpan());
-            });
+            var result = compiler.Compile(c => c.WithSource(source.AsSpan()));
 
             // Assert
             Assert.True(result.IsSuccess, $"Compilation failed: {result.ErrorMessage}");
-            Assert.NotNull(result.GetBytes());
-            Assert.True(result.GetBytes().Length > 0);
+            Assert.NotNull(result.Output.ToArray());
+            Assert.True(result.Output.Length > 0);
 
             // Verify that something was actually downloaded to the cache
             var cacheHasContent = Directory.EnumerateFileSystemEntries(cachePath).Any();
