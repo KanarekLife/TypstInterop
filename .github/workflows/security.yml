@@ -29,7 +29,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@b0c4fd77f6c559021d78430ec4d0d169ae74a4eb # v3
+        uses: github/codeql-action/init@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
         with:
           languages: csharp
 
@@ -37,14 +37,14 @@ jobs:
         run: dotnet build src/TypstInterop/TypstInterop.csproj -c Release -p:BuildRust=false
 
       - name: Analyze
-        uses: github/codeql-action/analyze@b0c4fd77f6c559021d78430ec4d0d169ae74a4eb # v3
+        uses: github/codeql-action/analyze@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
 
   rust-audit:
     name: Rust dependency audit
     runs-on: ubuntu-latest
     # Runs in the official Rust image (Docker official image) for a reproducible
     # toolchain. This job only needs Rust, so no dual-toolchain image is needed.
-    container: rust:slim
+    container: rust:slim@sha256:3b05f7c617a200c41c3506097f0d15fc193a1c93bfd8f141007b47cac8f95d3c
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -58,7 +58,7 @@ jobs:
           apt-get install -y --no-install-recommends build-essential pkg-config git
 
       - name: Cache cargo-audit
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.cargo/bin/cargo-audit
           key: cargo-audit-bin
@@ -76,7 +76,7 @@ jobs:
     # Runs in the official .NET SDK image for a reproducible toolchain. The 10.0
     # SDK is baked in; setup-dotnet adds 8.0 and 9.0 so the version set matches
     # the rest of CI. BuildRust=false everywhere here, so no Rust is needed.
-    container: mcr.microsoft.com/dotnet/sdk:10.0
+    container: mcr.microsoft.com/dotnet/sdk:10.0@sha256:548d93f8a18a1acbe6cc127bc4f47281430d34a9e35c18afa80a8d6741c2adc3
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -106,7 +106,7 @@ jobs:
     runs-on: ubuntu-latest
     # Mirrors the rust-audit job: runs in the official Rust image for a
     # reproducible toolchain. This job only needs Rust.
-    container: rust:slim
+    container: rust:slim@sha256:3b05f7c617a200c41c3506097f0d15fc193a1c93bfd8f141007b47cac8f95d3c
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -120,7 +120,7 @@ jobs:
           apt-get install -y --no-install-recommends build-essential pkg-config git
 
       - name: Cache cargo-deny
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.cargo/bin/cargo-deny
           key: cargo-deny-bin
