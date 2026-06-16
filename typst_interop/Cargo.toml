@@ -20,7 +20,7 @@ bytes = "1.6"
 comemo = "0.4"
 ecow = "0.2"
 chrono = { version = "0.4", features = ["clock"] }
-typst-kit = { version = "0.14.2", features = ["packages", "downloads", "fonts", "embed-fonts", "vendor-openssl"] }
+typst-kit = { version = "0.15.0", features = ["packages", "downloads", "fonts", "embed-fonts", "vendor-openssl"] }
 typst-syntax = "0.14.2"
 
 [build-dependencies]
