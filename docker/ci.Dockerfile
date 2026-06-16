@@ -28,7 +28,7 @@
 #       --filter "FullyQualifiedName!~Integration"
 # ---------------------------------------------------------------------------
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:548d93f8a18a1acbe6cc127bc4f47281430d34a9e35c18afa80a8d6741c2adc3
 
 # rustup/cargo are installed system-wide. RUSTUP_HOME stays fixed so the
 # toolchain is shared by all users, and the cargo bin dir is on PATH. We do NOT
@@ -56,8 +56,14 @@ RUN apt-get update \
 # the installed binaries live under /usr/local/cargo (on PATH); at runtime
 # CARGO_HOME is unset (see above) so cargo caches under the user's ~/.cargo.
 RUN export CARGO_HOME=/usr/local/cargo \
-    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-        | sh -s -- -y --default-toolchain stable --profile minimal \
+    && RUSTUP_VERSION=1.29.0 \
+    && RUSTUP_SHA256=4acc9acc76d5079515b46346a485974457b5a79893cfb01112423c89aeb5aa10 \
+    && curl --proto '=https' --tlsv1.2 -sSf -O \
+        "https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/x86_64-unknown-linux-gnu/rustup-init" \
+    && echo "${RUSTUP_SHA256}  rustup-init" | sha256sum -c - \
+    && chmod +x rustup-init \
+    && ./rustup-init -y --default-toolchain stable --profile minimal \
+    && rm rustup-init \
     && rustup component add rustfmt clippy \
     && rustup target add aarch64-unknown-linux-gnu \
     && chmod -R a+w "$RUSTUP_HOME" "$CARGO_HOME"
