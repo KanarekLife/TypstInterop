@@ -28,9 +28,9 @@ public class DiagnosticsTests
         using var compiler = new TypstCompiler();
         // HTML export always emits the "under active development" warning, which
         // gives us a stable way to verify warnings are surfaced on success.
-        var result = compiler.Compile(
-            new TypstCompileOptions { Format = TypstOutputFormat.Html },
-            c => c.WithSource("= Hello"));
+        var result = compiler.Compile(c => c
+            .WithSource("= Hello")
+            .WithFormat(TypstOutputFormat.Html));
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
         Assert.NotEmpty(result.Warnings);

@@ -19,6 +19,7 @@ public class OptionsTests
         {
             c.WithPackage("@preview/mock:0.1.0", p => p.WithSource("lib.typ", "#let x = 1"));
             c.WithSource("#import \"@preview/mock:0.1.0\": x");
+            return c;
         });
 
         Assert.False(result.IsSuccess);
@@ -37,6 +38,7 @@ public class OptionsTests
         {
             c.WithPackage("@preview/mock:0.1.0", p => p.WithSource("lib.typ", "#let x = 1"));
             c.WithSource("#import \"@preview/mock:0.1.0\": x");
+            return c;
         });
 
         Assert.False(result.IsSuccess);
@@ -64,6 +66,7 @@ public class OptionsTests
                     """u8)
             );
             c.WithSource("#import \"@preview/mock:0.1.0\": x\n#x");
+            return c;
         });
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
@@ -78,10 +81,7 @@ public class OptionsTests
         });
 
         // Even if we provide a font, it should be ignored in None mode
-        var result = compiler.Compile(c =>
-        {
-            c.WithSource("#set text(font: \"SomeNonExistentFont\")\nHello");
-        });
+        var result = compiler.Compile(c => c.WithSource("#set text(font: \"SomeNonExistentFont\")\nHello"));
 
         // Typst usually falls back to a default font if possible, 
         // but in "None" mode there are NO fonts at all, so it should probably have issues

@@ -30,7 +30,7 @@ The configurator passed to `Compile` exposes the following methods, each returni
 var result = compiler.Compile(c => c.WithSource("= Hello, world!"));
 
 if (result.IsSuccess)
-    File.WriteAllBytes("out.pdf", result.GetBytes());
+    File.WriteAllBytes("out.pdf", result.Output.ToArray());
 ```
 
 ## Passing inputs via #sys.inputs
@@ -137,15 +137,16 @@ An invalid package specification throws `ArgumentException`.
 
 ## Exporting PNG, SVG, or HTML
 
-Use the `Compile(TypstCompileOptions, configure)` overload to pick a format. PNG and SVG yield one output per page in `Outputs`.
+Use the fluent `.WithFormat(...)` method to pick a format. PNG and SVG yield one output per page in `Outputs`.
 
 ```csharp
-var result = compiler.Compile(
-    new TypstCompileOptions { Format = TypstOutputFormat.Png, Ppi = 300 },
-    c => c.WithSource("= Page one\n#pagebreak()\n= Page two"));
+var result = compiler.Compile(c => c
+    .WithSource("= Page one\n#pagebreak()\n= Page two")
+    .WithFormat(TypstOutputFormat.Png)
+    .WithPpi(300));
 
 for (var page = 0; page < result.Outputs.Count; page++)
-    File.WriteAllBytes($"page-{page + 1}.png", result.Outputs[page]);
+    File.WriteAllBytes($"page-{page + 1}.png", result.Outputs[page].ToArray());
 ```
 
 See [Output Formats](output-formats.md) for SVG/HTML and the PDF/A and metadata options.
@@ -205,7 +206,7 @@ var result = compiler.Compile(c => c
     .WithInput("user", "Developer"));
 
 if (result.IsSuccess)
-    File.WriteAllBytes("report.pdf", result.GetBytes());
+    File.WriteAllBytes("report.pdf", result.Output.ToArray());
 else
     Console.WriteLine($"Compilation failed: {result.ErrorMessage}");
 ```

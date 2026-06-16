@@ -14,7 +14,7 @@ It currently embeds **Typst 0.15.0**.
 - **Font listing** — enumerate available font families with `ListFonts`.
 - **Fluent API** — configure each compilation job with a small, chainable builder.
 - **Broad target support** — .NET 8, 9, 10, and .NET Framework 4.8.
-- **Cross-platform** — Windows, Linux, and macOS on x64 and arm64 (.NET Framework is Windows-only).
+- **Cross-platform** — Windows, Linux (glibc and musl/Alpine), and macOS on x64 and arm64 (musl is x64-only; .NET Framework is Windows-only).
 - **Deterministic & offline-capable** — control package and font resolution, or turn the network off entirely.
 
 ## Supported platforms
@@ -22,7 +22,8 @@ It currently embeds **Typst 0.15.0**.
 | OS | x64 | arm64 |
 | --- | :---: | :---: |
 | Windows | Yes | Yes |
-| Linux | Yes | Yes |
+| Linux (glibc) | Yes | Yes |
+| Linux (musl/Alpine) | Yes | No |
 | macOS | Yes | Yes |
 
 The matching native binary is delivered automatically through per-RID `TypstInterop.runtime.*` packages.

@@ -20,7 +20,7 @@ public class RootPathTests
                 .WithSource("#import \"data.typ\": value\nLoaded: #value"));
 
             Assert.True(result.IsSuccess, result.ErrorMessage);
-            Assert.NotEmpty(result.GetBytes());
+            Assert.NotEmpty(result.Output.ToArray());
         }
         finally
         {

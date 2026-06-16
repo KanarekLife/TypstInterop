@@ -4,8 +4,10 @@ namespace TypstInterop.Models;
 
 /// <summary>
 /// Per-compilation options controlling the output format and export settings.
+/// Accumulated internally via the <c>With*</c> methods on
+/// <see cref="TypstInterop.Abstractions.ITypstConfigurator"/>.
 /// </summary>
-public sealed class TypstCompileOptions
+internal sealed class TypstCompileOptions
 {
     /// <summary>
     /// Gets or sets the output format. Defaults to <see cref="TypstOutputFormat.Pdf"/>.

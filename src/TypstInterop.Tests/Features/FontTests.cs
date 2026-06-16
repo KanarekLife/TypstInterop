@@ -268,7 +268,7 @@ public class FontTests
             .WithSource("#set text(font: \"Pixel\")\nHello in Pixel!"));
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
-        Assert.NotNull(result.GetBytes());
+        Assert.NotNull(result.Output.ToArray());
     }
 
     [Fact]

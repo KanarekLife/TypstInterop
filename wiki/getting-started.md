@@ -32,8 +32,8 @@ var result = compiler.Compile(c => c.WithSource(source));
 
 if (result.IsSuccess)
 {
-    File.WriteAllBytes("hello.pdf", result.GetBytes());
-    Console.WriteLine($"Wrote {result.GetBytes().Length} bytes.");
+    File.WriteAllBytes("hello.pdf", result.Output.ToArray());
+    Console.WriteLine($"Wrote {result.Output.Length} bytes.");
 }
 else
 {
@@ -50,9 +50,10 @@ else
 | `IsSuccess` | `true` when compilation succeeded. |
 | `ErrorMessage` | The error text when `IsSuccess` is `false`; otherwise `null`. |
 | `Diagnostics` / `Errors` / `Warnings` | Structured diagnostics (see [Diagnostics & Error Handling](diagnostics.md)). |
-| `Outputs` | All produced outputs as `IReadOnlyList<byte[]>` (one per page for PNG/SVG). |
-| `GetBytes()` | The first output (the PDF) as a `byte[]` (empty array on failure). |
-| `GetStream()` | The first output as a `Stream` (`Stream.Null` on failure). |
+| `Output` | The single (or first) produced artifact as a `TypstOutput`. Throws `InvalidOperationException` if there is no output (e.g. on failure). |
+| `Outputs` | All produced artifacts as `IReadOnlyList<TypstOutput>` — one for PDF/HTML, one per page for PNG/SVG. |
+
+Each `TypstOutput` exposes `ToArray()` (`byte[]`), `ToStream()` (`Stream`), `Span` (`ReadOnlySpan<byte>`), and `Length`.
 
 Always check `IsSuccess` before using the data:
 
@@ -61,7 +62,7 @@ var result = compiler.Compile(c => c.WithSource(source));
 if (!result.IsSuccess)
     throw new InvalidOperationException(result.ErrorMessage);
 
-using var stream = result.GetStream();
+using var stream = result.Output.ToStream();
 // copy to a file, HTTP response, blob store, etc.
 ```
 
@@ -69,6 +70,12 @@ using var stream = result.GetStream();
 
 ```csharp
 Console.WriteLine(TypstCompiler.TypstVersion); // "0.15.0"
+```
+
+The same value is available as an instance property on `ITypstCompiler`, which forwards to `TypstCompiler.TypstVersion`:
+
+```csharp
+Console.WriteLine(compiler.Version); // "0.15.0"
 ```
 
 ## Reusing a compiler
@@ -84,15 +91,15 @@ var second = compiler.Compile(c => c.WithSource("Second"));
 
 ## Other output formats
 
-`Compile` also has an overload taking `TypstCompileOptions`, which lets you export PNG, SVG, or HTML and set PDF options (PDF/A standard, title/author metadata, fixed timestamp):
+The builder also exposes fluent output options that let you export PNG, SVG, or HTML and set PDF options (PDF/A standard, title/author metadata, fixed timestamp):
 
 ```csharp
-var result = compiler.Compile(
-    new TypstCompileOptions { Format = TypstOutputFormat.Png },
-    c => c.WithSource(source));
+var result = compiler.Compile(c => c
+    .WithSource(source)
+    .WithFormat(TypstOutputFormat.Png));
 
 for (var page = 0; page < result.Outputs.Count; page++)
-    File.WriteAllBytes($"page-{page + 1}.png", result.Outputs[page]);
+    File.WriteAllBytes($"page-{page + 1}.png", result.Outputs[page].ToArray());
 ```
 
 See [Output Formats](output-formats.md) for the full set of formats and options.

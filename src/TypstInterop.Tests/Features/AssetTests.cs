@@ -21,8 +21,8 @@ public class AssetTests
             .WithSource("""#image("image.png")"""));
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
-        Assert.NotNull(result.GetBytes());
-        Assert.True(result.GetBytes().Length > 100, "PDF should have a reasonable size");
+        Assert.NotNull(result.Output.ToArray());
+        Assert.True(result.Output.Length > 100, "PDF should have a reasonable size");
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public class AssetTests
             ));
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
-        Assert.NotNull(result.GetBytes());
+        Assert.NotNull(result.Output.ToArray());
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public class AssetTests
             .WithSource(@"#image(""image.svg"", width: 2cm)"));
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
-        Assert.NotNull(result.GetBytes());
-        Assert.True(result.GetBytes().Length > 100, "PDF should have a reasonable size");
+        Assert.NotNull(result.Output.ToArray());
+        Assert.True(result.Output.Length > 100, "PDF should have a reasonable size");
     }
 }

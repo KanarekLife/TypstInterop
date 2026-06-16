@@ -11,9 +11,10 @@ Every `Compile` call returns a `TypstCompilationResult` (namespace `TypstInterop
 | `Errors` | `IEnumerable<TypstDiagnostic>` | Only the diagnostics with `Error` severity. |
 | `Warnings` | `IEnumerable<TypstDiagnostic>` | Only the diagnostics with `Warning` severity. |
 | `ErrorMessage` | `string?` | The concatenated error text when `IsSuccess` is `false`; otherwise `null`. |
-| `Outputs` | `IReadOnlyList<byte[]>` | The produced outputs (see [Output Formats](output-formats.md)). |
-| `GetBytes()` | `byte[]` | The first output (empty array on failure). |
-| `GetStream()` | `Stream` | The first output (`Stream.Null` on failure). |
+| `Output` | `TypstOutput` | The single (or first) produced artifact as a `TypstOutput`. Throws `InvalidOperationException` if there is no output (e.g. on failure). |
+| `Outputs` | `IReadOnlyList<TypstOutput>` | All produced artifacts — one for PDF/HTML, one per page for PNG/SVG (see [Output Formats](output-formats.md)). |
+
+Each `TypstOutput` exposes `ToArray()` (`byte[]`), `ToStream()` (`Stream`), `Span` (`ReadOnlySpan<byte>`), and `Length`.
 
 A successful compilation can still carry warnings, so `Warnings` is worth inspecting even when `IsSuccess` is `true`.
 
@@ -66,7 +67,7 @@ foreach (var warning in result.Warnings)
     Console.WriteLine($"warning: {warning}"); // uses ToString()
 
 if (result.IsSuccess)
-    File.WriteAllBytes("out.pdf", result.GetBytes());
+    File.WriteAllBytes("out.pdf", result.Output.ToArray());
 ```
 
 ## Surfacing all diagnostics

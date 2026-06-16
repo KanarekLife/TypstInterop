@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using TypstInterop.Models;
 
 namespace TypstInterop.Abstractions;
 
@@ -62,4 +63,41 @@ public interface ITypstConfigurator
     /// <param name="packageSpec">The package specification (e.g., "@preview/example:1.0.0").</param>
     /// <param name="configure">Configuration for the mocked package.</param>
     ITypstConfigurator WithPackage(string packageSpec, Action<ITypstPackageConfigurator> configure);
+
+    /// <summary>
+    /// Sets the output format. Defaults to <see cref="TypstOutputFormat.Pdf"/>.
+    /// </summary>
+    ITypstConfigurator WithFormat(TypstOutputFormat format);
+
+    /// <summary>
+    /// Sets the resolution in pixels per inch used when rendering to
+    /// <see cref="TypstOutputFormat.Png"/>. Defaults to 144. Ignored for other formats.
+    /// </summary>
+    ITypstConfigurator WithPpi(float ppi);
+
+    /// <summary>
+    /// Sets the PDF standard to conform to. Ignored for non-PDF formats.
+    /// </summary>
+    ITypstConfigurator WithPdfStandard(TypstPdfStandard standard);
+
+    /// <summary>
+    /// Sets a fixed creation timestamp to embed in the PDF for reproducible
+    /// output. When null, the document's own date is used. Ignored for non-PDF formats.
+    /// </summary>
+    ITypstConfigurator WithCreationTimestamp(DateTimeOffset? timestamp);
+
+    /// <summary>
+    /// Sets whether SVG/HTML output should be pretty-printed. Ignored for PDF and PNG.
+    /// </summary>
+    ITypstConfigurator WithPrettyOutput(bool pretty = true);
+
+    /// <summary>
+    /// Sets the document title metadata (PDF only).
+    /// </summary>
+    ITypstConfigurator WithTitle(string? title);
+
+    /// <summary>
+    /// Sets the document author metadata (PDF only).
+    /// </summary>
+    ITypstConfigurator WithAuthor(string? author);
 }

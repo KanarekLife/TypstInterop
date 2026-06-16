@@ -30,10 +30,11 @@ public class MockingTests
                                 Mock content: #x
                 """
             );
+            return c;
         });
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
-        Assert.NotNull(result.GetBytes());
+        Assert.NotNull(result.Output.ToArray());
     }
 
     [Fact]
@@ -56,10 +57,11 @@ public class MockingTests
             {
                 c.WithPackage("@preview/dirmock:0.1.0", p => p.WithDirectory(tempDir));
                 c.WithSource("#import \"@preview/dirmock:0.1.0\": x\n#x");
+                return c;
             });
 
             Assert.True(result.IsSuccess, result.ErrorMessage);
-            Assert.NotEmpty(result.GetBytes());
+            Assert.NotEmpty(result.Output.ToArray());
         }
         finally
         {

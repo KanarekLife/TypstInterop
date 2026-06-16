@@ -48,4 +48,4 @@ dotnet test
 
 ## Cross-platform notes
 
-The native binary is platform-specific. A local `dotnet build` produces the binary for your current OS and architecture only. The published NuGet packages ship per-RID `TypstInterop.runtime.<rid>` packages covering Windows, Linux, and macOS on x64 and arm64; .NET Framework 4.8 is Windows-only.
+The native binary is platform-specific. A local `dotnet build` produces the binary for your current OS and architecture only. The published NuGet packages ship per-RID `TypstInterop.runtime.<rid>` packages covering Windows, Linux (glibc and musl/Alpine, RID `linux-musl-x64`), and macOS on x64 and arm64 (musl is x64-only); .NET Framework 4.8 is Windows-only.

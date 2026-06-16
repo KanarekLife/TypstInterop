@@ -20,6 +20,9 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
     private readonly ReaderWriterLockSlim _lock = new();
     private bool _isDisposed;
 
+    // Reset at the start of every Compile call; written by the With* option methods.
+    private TypstCompileOptions _options = new();
+
     /// <summary>
     /// Gets the version of the underlying Typst compiler.
     /// </summary>
@@ -34,6 +37,9 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
             return version;
         }
     }
+
+    /// <inheritdoc />
+    public string Version => TypstVersion;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TypstCompiler"/> class with default options.
@@ -70,25 +76,18 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
     }
 
     /// <inheritdoc />
-    public TypstCompilationResult Compile(Action<ITypstConfigurator> configure)
-    {
-        return Compile(new TypstCompileOptions(), configure);
-    }
-
-    /// <inheritdoc />
-    public TypstCompilationResult Compile(TypstCompileOptions options, Action<ITypstConfigurator> configure)
+    public TypstCompilationResult Compile(Func<ITypstConfigurator, ITypstConfigurator> build)
     {
         CheckDisposed();
-        if (options is null)
-            throw new ArgumentNullException(nameof(options));
-        if (configure is null)
-            throw new ArgumentNullException(nameof(configure));
+        if (build is null)
+            throw new ArgumentNullException(nameof(build));
 
         _lock.EnterWriteLock();
         try
         {
             NativeMethods.typst_context_reset(_world);
-            configure(this);
+            var options = _options = new TypstCompileOptions();
+            build(this);
 
             fixed (byte* pTitle = options.Title != null ? ToUtf8NullTerminated(options.Title) : null)
             fixed (byte* pAuthor = options.Author != null ? ToUtf8NullTerminated(options.Author) : null)
@@ -152,13 +151,13 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
         }
     }
 
-    private static byte[][] ReadOutputs(CompilationResult result)
+    private static TypstOutput[] ReadOutputs(CompilationResult result)
     {
         var count = (int)result.output_count.Value;
         if (count == 0 || result.outputs == null)
             return [];
 
-        var outputs = new byte[count][];
+        var outputs = new TypstOutput[count];
         for (var i = 0; i < count; i++)
         {
             var buffer = result.outputs[i];
@@ -166,7 +165,7 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
             var bytes = new byte[len];
             if (len > 0)
                 Marshal.Copy((IntPtr)buffer.data, bytes, 0, len);
-            outputs[i] = bytes;
+            outputs[i] = new TypstOutput(bytes);
         }
         return outputs;
     }
@@ -277,6 +276,48 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
     {
         var configurator = new TypstPackageConfigurator(this, packageSpec);
         configure(configurator);
+        return this;
+    }
+
+    ITypstConfigurator ITypstConfigurator.WithFormat(TypstOutputFormat format)
+    {
+        _options.Format = format;
+        return this;
+    }
+
+    ITypstConfigurator ITypstConfigurator.WithPpi(float ppi)
+    {
+        _options.Ppi = ppi;
+        return this;
+    }
+
+    ITypstConfigurator ITypstConfigurator.WithPdfStandard(TypstPdfStandard standard)
+    {
+        _options.PdfStandard = standard;
+        return this;
+    }
+
+    ITypstConfigurator ITypstConfigurator.WithCreationTimestamp(DateTimeOffset? timestamp)
+    {
+        _options.CreationTimestamp = timestamp;
+        return this;
+    }
+
+    ITypstConfigurator ITypstConfigurator.WithPrettyOutput(bool pretty)
+    {
+        _options.Pretty = pretty;
+        return this;
+    }
+
+    ITypstConfigurator ITypstConfigurator.WithTitle(string? title)
+    {
+        _options.Title = title;
+        return this;
+    }
+
+    ITypstConfigurator ITypstConfigurator.WithAuthor(string? author)
+    {
+        _options.Author = author;
         return this;
     }
 
@@ -394,6 +435,9 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
         }
     }
 
+    /// <summary>
+    /// Releases the native Typst world (fonts and package cache) held by this instance.
+    /// </summary>
     public void Dispose()
     {
         if (_isDisposed)
@@ -407,6 +451,9 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>
+    /// Finalizer that releases the native Typst world if <see cref="Dispose"/> was not called.
+    /// </summary>
     ~TypstCompiler()
     {
         Dispose();
