@@ -29,7 +29,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
+        uses: github/codeql-action/init@87557b9c84dde89fdd9b10e88954ac2f4248e463 # v4
         with:
           languages: csharp
 
@@ -37,7 +37,7 @@ jobs:
         run: dotnet build src/TypstInterop/TypstInterop.csproj -c Release -p:BuildRust=false
 
       - name: Analyze
-        uses: github/codeql-action/analyze@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
+        uses: github/codeql-action/analyze@87557b9c84dde89fdd9b10e88954ac2f4248e463 # v4
 
   rust-audit:
     name: Rust dependency audit
@@ -146,7 +146,7 @@ jobs:
           persist-credentials: false
 
       - name: Dependency Review
-        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           # GHSA-cq8v-f236-94qc: rand 0.8.5 is "unsound with a custom logger using
           # rand::rng()" (low severity). It is pulled in transitively through the

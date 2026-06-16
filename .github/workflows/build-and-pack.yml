@@ -254,7 +254,7 @@ jobs:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
       - name: Attest Native Binary Provenance
-        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
           subject-path: src/TypstInterop/runtimes/${{ matrix.rid }}/native/*
 
@@ -321,7 +321,7 @@ jobs:
           dotnet pack src/TypstInterop/TypstInterop.csproj -c Release -p:BuildRust=false -p:PackRuntimeDependencies=true --output ./nupkg --source ./nupkg --source https://api.nuget.org/v3/index.json
 
       - name: Attest NuGet Package Provenance
-        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
           subject-path: ./nupkg/*
 
