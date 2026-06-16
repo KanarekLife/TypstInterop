@@ -473,6 +473,7 @@ jobs:
       - name: Create Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           PRERELEASE=""
           if [[ "${{ github.ref_name }}" == *-* ]]; then PRERELEASE="--prerelease"; fi
