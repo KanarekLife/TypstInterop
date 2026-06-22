@@ -18,6 +18,16 @@
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.300" PrivateAssets="All" />
   </ItemGroup>
 
+  <!-- Ship an MSBuild warning that fires when a consumer builds an executable
+       without a RuntimeIdentifier. Because the native ships in RID-specific
+       runtime packages selected via runtime.json (only restored for a specific
+       RID), a RID-less app would otherwise crash at startup with a cryptic
+       DllNotFoundException. buildTransitive/ applies to direct and transitive
+       consumers alike. The file is not a compile input for this project. -->
+  <ItemGroup>
+    <None Include="build/TypstInterop.targets" Pack="true" PackagePath="buildTransitive/TypstInterop.targets" Visible="false" />
+  </ItemGroup>
+
   <!-- A runtime.json RID graph (packed at the package root) makes each runtime
        package a RID-conditional dependency, so consumers restore only the native
        for their own platform instead of all of them. -->

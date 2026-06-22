@@ -1,0 +1,34 @@
+<Project>
+  <!--
+    TypstInterop ships its native binary in per-RID runtime packages
+    (TypstInterop.runtime.<rid>) that the main package pulls in through a
+    runtime.json RID graph. NuGet only restores a runtime.json dependency when
+    the project restores for a specific RuntimeIdentifier. A framework-dependent
+    build with no RID therefore never restores the native, and the app fails at
+    startup with: DllNotFoundException 'typst_interop'.
+
+    This warning turns that runtime crash into an actionable build message. It
+    only fires for executables built without a RuntimeIdentifier (libraries are
+    skipped, since they defer the RID choice to the final app).
+
+    Opt out with:  <TypstInteropSuppressRuntimeIdentifierWarning>true</...>
+    Escalate to an error with:
+                   <TypstInteropTreatMissingRuntimeIdentifierAsError>true</...>
+  -->
+  <Target Name="_TypstInteropWarnMissingRuntimeIdentifier"
+          AfterTargets="Build"
+          Condition="'$(RuntimeIdentifier)' == ''
+                     and ('$(OutputType)' == 'Exe' or '$(OutputType)' == 'WinExe')
+                     and '$(TypstInteropSuppressRuntimeIdentifierWarning)' != 'true'">
+    <PropertyGroup>
+      <_TypstInteropRidMessage>TypstInterop: no RuntimeIdentifier is set, so the native 'typst_interop' library is not restored and this app will throw DllNotFoundException at startup. Set a &lt;RuntimeIdentifier&gt; (e.g. win-x64, linux-x64, linux-musl-x64, osx-arm64) in this project, or build/run/publish with -r &lt;rid&gt;. See https://github.com/KanarekLife/TypstInterop#runtime-identifier . Suppress with &lt;TypstInteropSuppressRuntimeIdentifierWarning&gt;true&lt;/TypstInteropSuppressRuntimeIdentifierWarning&gt;.</_TypstInteropRidMessage>
+    </PropertyGroup>
+
+    <Warning Code="TYPST0001"
+             Text="$(_TypstInteropRidMessage)"
+             Condition="'$(TypstInteropTreatMissingRuntimeIdentifierAsError)' != 'true'" />
+    <Error Code="TYPST0001"
+           Text="$(_TypstInteropRidMessage)"
+           Condition="'$(TypstInteropTreatMissingRuntimeIdentifierAsError)' == 'true'" />
+  </Target>
+</Project>
