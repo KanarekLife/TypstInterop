@@ -1,0 +1,66 @@
+# Reusable publish step: pushes the `nuget-package` artifact (produced earlier
+# in the same run by _build.yml) to NuGet.org and GitHub Packages.
+#
+# Called by build-and-pack.yml (manual publish) and release.yml (release flow).
+# Both pushes use --skip-duplicate, so re-running is idempotent.
+#
+# Callers MUST pass `secrets: inherit` so NUGET_API_KEY is available.
+name: _publish
+
+on:
+  workflow_call:
+    inputs:
+      artifact:
+        description: 'Name of the artifact holding the .nupkg/.snupkg files.'
+        type: string
+        required: false
+        default: 'nuget-package'
+
+jobs:
+  publish-nuget:
+    name: Publish to NuGet
+    runs-on: ubuntu-latest
+    environment:
+      name: nuget
+      url: https://www.nuget.org/packages/TypstInterop
+    steps:
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download NuGet Package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ inputs.artifact }}
+          path: nupkg
+
+      - name: Push to NuGet
+        run: dotnet nuget push ./nupkg/* --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+
+  publish-github-packages:
+    name: Publish to GitHub Packages
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    environment:
+      name: github-packages
+      url: https://github.com/${{ github.repository }}/packages
+    steps:
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download NuGet Package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ inputs.artifact }}
+          path: nupkg
+
+      - name: Push to GitHub Packages
+        run: dotnet nuget push ./nupkg/* --api-key "$GITHUB_TOKEN" --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json --skip-duplicate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

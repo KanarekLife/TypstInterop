@@ -1,0 +1,432 @@
+# Reusable build pipeline: CI image -> lint -> test -> native matrix -> pack -> SBOM.
+#
+# Produces the `nuget-package` and `sbom` artifacts for the current run. It is
+# called by:
+#   * build-and-pack.yml  -- CI on push/PR and manual publish.
+#   * release.yml         -- builds the version-bumped commit so the FULL
+#                            cross-platform matrix gates the tag and publish.
+#
+# `ref` selects which commit to build. Leave it empty (the default) to build the
+# commit/ref that triggered the caller (push SHA, or the PR merge ref). The
+# release workflow passes the SHA of its staging commit.
+name: _build
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref or SHA to build. Empty = the caller event default (push SHA / PR merge ref).'
+        type: string
+        required: false
+        default: ''
+
+jobs:
+  # Builds the dual-toolchain (.NET SDK + Rust) CI image from docker/ci.Dockerfile
+  # and pushes it to GHCR so the Linux jobs below can run inside it. The same
+  # image can be built and run locally to reproduce the lint/test environment
+  # (see docker/ci.Dockerfile for instructions). Uses only the standard `docker`
+  # CLI and the built-in GITHUB_TOKEN -- no third-party actions.
+  ci-image:
+    name: Build CI Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Compute image reference
+        id: meta
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          # Tag the image by the Dockerfile hash so it is rebuilt only when the
+          # toolchain definition changes and is otherwise pulled from cache.
+          tag="$(sha256sum docker/ci.Dockerfile | cut -c1-12)"
+          echo "image=ghcr.io/${owner}/typstinterop-ci:${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push
+        # Untrusted fork PRs receive a read-only GITHUB_TOKEN and cannot push to
+        # GHCR, so only attempt the build-and-push when the run is not a fork PR
+        # (i.e. push/tag/dispatch, or a PR from a branch in this same repo). The
+        # downstream containerized jobs only need `packages: read` and can still
+        # pull the already-published image on fork PRs.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          image="${{ steps.meta.outputs.image }}"
+          if docker manifest inspect "$image" >/dev/null 2>&1; then
+            echo "Image $image already exists; skipping build."
+          else
+            docker build -f docker/ci.Dockerfile -t "$image" .
+            docker push "$image"
+          fi
+
+  lint:
+    name: Lint and Format
+    needs: ci-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ${{ needs.ci-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      # The .NET 10 SDK is baked into the image. setup-dotnet still pins the
+      # exact channel so the version set stays consistent with the rest of CI.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
+        with:
+          dotnet-version: '10.0.x'
+
+      # Rust (stable + rustfmt/clippy) is preinstalled in the CI image.
+
+      - name: Cache Cargo
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            src/typst_interop/target
+          key: ${{ runner.os }}-cargo-host-${{ hashFiles('src/typst_interop/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-host-
+
+      - name: Check C# Formatting
+        run: dotnet format --verify-no-changes --verbosity diagnostic
+
+      - name: Check Rust Formatting
+        run: cargo fmt --all -- --check
+        working-directory: src/typst_interop
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+        working-directory: src/typst_interop
+
+  test:
+    name: Test
+    needs: [ci-image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ${{ needs.ci-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      # The .NET 10 SDK is baked into the image; setup-dotnet adds 8.0.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      # Rust (stable) is preinstalled in the CI image.
+
+      - name: Cache Cargo
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            src/typst_interop/target
+          key: ${{ runner.os }}-cargo-host-${{ hashFiles('src/typst_interop/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-host-
+
+      # The test build compiles the native library via the BuildRust target and
+      # exercises the FFI. Only the .NET (Core) TFMs are run here: net48 tests
+      # require Mono on Linux, and net48 compilation is already covered by the
+      # full-solution build in the pack job. Integration tests hit the network
+      # (Typst Universe) and are excluded to keep the gate deterministic.
+      - name: Run tests
+        run: |
+          dotnet test src/TypstInterop.Tests/TypstInterop.Tests.csproj -f net10.0 --filter "FullyQualifiedName!~Integration"
+          dotnet test src/TypstInterop.Tests/TypstInterop.Tests.csproj -f net8.0 --filter "FullyQualifiedName!~Integration"
+
+  build-native:
+    name: Build Native (${{ matrix.rid }})
+    needs: [ci-image, lint, test]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      packages: read
+      # Required to generate SLSA build-provenance attestations for the native
+      # binaries via OIDC.
+      id-token: write
+      attestations: write
+    # The Linux RIDs run inside the dual-toolchain CI image for a reproducible
+    # toolchain; the Windows/macOS RIDs cannot run in a Linux container, so they
+    # build directly on their runners (matrix.container is empty for them, which
+    # Actions treats as "no container").
+    container:
+      image: ${{ matrix.container }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            target: x86_64-pc-windows-msvc
+            container: ''
+          - os: windows-latest
+            rid: win-arm64
+            target: aarch64-pc-windows-msvc
+            container: ''
+          # All Linux RIDs build with cargo-zigbuild. gnu RIDs add a glibc 2.28
+          # floor (via the target suffix) independent of the runner's glibc; musl
+          # RIDs need no floor. zig ships compiler-rt and a full musl sysroot, so
+          # the musl builds need no host musl-gcc/libgcc_s and still link musl
+          # libc dynamically (see -crt-static below) to load as a normal .so.
+          - os: ubuntu-latest
+            rid: linux-x64
+            target: x86_64-unknown-linux-gnu
+            container: ''
+            cargo: zigbuild
+            glibc: '.2.28'
+          - os: ubuntu-24.04-arm
+            rid: linux-arm64
+            target: aarch64-unknown-linux-gnu
+            container: ''
+            cargo: zigbuild
+            glibc: '.2.28'
+          - os: ubuntu-latest
+            rid: linux-musl-x64
+            target: x86_64-unknown-linux-musl
+            container: ''
+            cargo: zigbuild
+          - os: ubuntu-24.04-arm
+            rid: linux-musl-arm64
+            target: aarch64-unknown-linux-musl
+            container: ''
+            cargo: zigbuild
+          - os: macos-latest
+            rid: osx-x64
+            target: x86_64-apple-darwin
+            container: ''
+          - os: macos-latest
+            rid: osx-arm64
+            target: aarch64-apple-darwin
+            container: ''
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      # All native builds run on bare runners (no container), so install Rust.
+      - name: Set up Rust
+        if: matrix.container == ''
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add ${{ matrix.target }}
+
+      # zig + cargo-zigbuild link all Linux RIDs (glibc floor for gnu, musl
+      # sysroot + compiler-rt for musl).
+      - name: Install cargo-zigbuild
+        if: matrix.cargo == 'zigbuild'
+        run: |
+          python3 -m pip install --break-system-packages cargo-zigbuild ziglang
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Cargo
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            src/typst_interop/target
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('src/typst_interop/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-${{ matrix.target }}-
+
+      - name: Build Native Library
+        # Build a single TFM: the native binary is identical across all target
+        # frameworks (it depends only on the RID), and the multi-TFM managed
+        # assemblies are built later in the pack job. Compiling every TFM here
+        # would fire the BuildRust target once per inner build in parallel,
+        # racing concurrent `cargo (zig)build` invocations on the same target/
+        # dir and shared zig wrapper ("Text file busy"). One TFM = one cargo run.
+        #
+        # Force bash on every runner: Windows defaults `run:` to PowerShell,
+        # where `\` is not a line-continuation, so the multi-line command below
+        # would break apart ("-p:" parsed as a separate command).
+        shell: bash
+        run: |
+          dotnet build src/TypstInterop/TypstInterop.csproj -c Release -f net8.0 -r ${{ matrix.rid }} \
+            -p:RustTarget=${{ matrix.target }} \
+            -p:CargoCommand=${{ matrix.cargo || 'build' }} \
+            -p:RustTargetSuffix=${{ matrix.glibc }}
+        env:
+          # musl cdylibs link musl libc dynamically so they load as a normal .so
+          # on Alpine. cargo-zigbuild provides the linker (zig cc) and compiler-rt,
+          # so no musl-gcc/libgcc_s is needed -- only these RUSTFLAGS to opt out of
+          # the musl default of static linking.
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS: -C target-feature=-crt-static
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS: -C target-feature=-crt-static
+
+      - name: Attest Native Binary Provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
+        with:
+          subject-path: src/TypstInterop/runtimes/${{ matrix.rid }}/native/*
+
+      - name: Upload Native Binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: native-${{ matrix.rid }}
+          path: src/TypstInterop/runtimes/${{ matrix.rid }}/native/*
+
+  pack:
+    name: Pack NuGet
+    needs: [ci-image, build-native]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      # Required to generate SLSA build-provenance attestations for the packed
+      # NuGet packages via OIDC.
+      id-token: write
+      attestations: write
+    container:
+      image: ${{ needs.ci-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      # The .NET 10 SDK is baked into the image; setup-dotnet adds 8.0 and 9.0.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Download All Native Binaries
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: artifacts
+
+      - name: Organize Runtimes
+        run: |
+          for rid in win-x64 win-arm64 linux-x64 linux-arm64 linux-musl-x64 linux-musl-arm64 osx-x64 osx-arm64; do
+            mkdir -p "src/TypstInterop/runtimes/$rid/native"
+            cp artifacts/native-$rid/* "src/TypstInterop/runtimes/$rid/native/"
+          done
+
+          echo "Verifying organized runtimes structure:"
+          ls -R src/TypstInterop/runtimes
+
+      - name: Build and Pack Runtimes
+        run: |
+          for rid in win-x64 win-arm64 linux-x64 linux-arm64 linux-musl-x64 linux-musl-arm64 osx-x64 osx-arm64; do
+            dotnet pack src/TypstInterop.Runtime/TypstInterop.Runtime.csproj -c Release -p:RuntimeIdentifier=$rid -p:BuildRust=false -p:NoBuild=true --output ./nupkg
+          done
+
+      - name: Build and Pack Main
+        run: |
+          dotnet build TypstInterop.slnx -c Release -p:BuildRust=false
+          dotnet pack src/TypstInterop/TypstInterop.csproj -c Release -p:BuildRust=false -p:PackRuntimeDependencies=true --output ./nupkg --source ./nupkg --source https://api.nuget.org/v3/index.json
+
+      - name: Attest NuGet Package Provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
+        with:
+          subject-path: ./nupkg/*
+
+      - name: Upload NuGet Package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: nuget-package
+          path: ./nupkg/*
+
+  sbom:
+    name: Generate SBOMs
+    needs: [ci-image, pack]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ${{ needs.ci-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      # The .NET 10 SDK is baked into the image; Rust (stable) is preinstalled.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache Cargo
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            src/typst_interop/target
+          key: ${{ runner.os }}-cargo-host-${{ hashFiles('src/typst_interop/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-host-
+
+      - name: Generate Rust SBOM (CycloneDX)
+        run: |
+          cargo install cargo-cyclonedx --locked
+          cargo cyclonedx --format json
+        working-directory: src/typst_interop
+
+      - name: Generate .NET SBOM (CycloneDX)
+        run: |
+          dotnet tool install --global CycloneDX
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet restore src/TypstInterop/TypstInterop.csproj
+          dotnet CycloneDX src/TypstInterop/TypstInterop.csproj --json --output ./sbom --filename sbom-dotnet.json
+
+      - name: Collect SBOMs
+        run: |
+          mkdir -p sbom
+          find src/typst_interop -maxdepth 1 -name '*.cdx.json' -exec cp {} sbom/sbom-rust.json \;
+          ls -la sbom
+
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom
+          path: sbom/*
