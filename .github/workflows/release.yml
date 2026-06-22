@@ -1,0 +1,285 @@
+name: Release
+
+# One-click release straight from the Actions tab.
+#
+# Flow (see the "Find a good strategy" design):
+#   1. prepare   -- pick the next version from a semver bump (or an explicit
+#                   override), validate it, bump every version-bearing file,
+#                   commit, and push to a short-lived staging branch.
+#   2. build     -- run the FULL reusable pipeline (_build.yml) against the
+#                   staging commit: lint, test, the 8-RID native matrix, pack
+#                   and SBOMs. This is the gate -- nothing below runs unless the
+#                   entire cross-platform build is green.
+#   3. finalize  -- fast-forward main to the staging commit and push the
+#                   annotated v<version> tag. A non-fast-forward (main moved
+#                   meanwhile) aborts instead of clobbering.
+#   4. publish   -- push the exact verified packages to NuGet + GitHub Packages.
+#   5. release   -- create the GitHub Release with packages, SBOMs and checksums.
+#   6. cleanup   -- always delete the staging branch.
+#
+# Why this shape: a push/tag authored by GITHUB_TOKEN does NOT trigger other
+# workflows (GitHub's anti-recursion rule), so the tag cannot kick off a build.
+# This workflow therefore builds, tags AND publishes itself -- and because the
+# build runs on the staging branch first, a broken commit never reaches main or
+# produces a tag. Set `dry_run` to validate + build a version bump without
+# tagging or publishing anything.
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Semver bump (ignored if "version" is set)'
+        type: choice
+        options: [patch, minor, major, prerelease]
+        default: patch
+      prerelease_id:
+        description: 'Prerelease identifier (used only for the "prerelease" bump)'
+        type: string
+        default: rc
+      version:
+        description: 'Explicit version, e.g. 2.1.0 (overrides release_type; no leading v)'
+        type: string
+        default: ''
+      dry_run:
+        description: 'Validate + build the bump, but do not tag or publish'
+        type: boolean
+        default: false
+
+# Never cancel an in-flight release, and never run two at once.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.compute.outputs.version }}
+      tag: ${{ steps.compute.outputs.tag }}
+      sha: ${{ steps.push.outputs.sha }}
+      staging_branch: ${{ steps.compute.outputs.staging_branch }}
+    steps:
+      # Release always cuts from the tip of main, regardless of which ref the
+      # workflow was dispatched on. Full history so tag-existence checks work.
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: main
+          fetch-depth: 0
+          # Keep the token so we can push the staging branch.
+          persist-credentials: true
+
+      - name: Compute and validate next version
+        id: compute
+        env:
+          RELEASE_TYPE: ${{ inputs.release_type }}
+          PRE_ID: ${{ inputs.prerelease_id }}
+          EXPLICIT: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          CURRENT="$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props | head -1)"
+          if [ -z "$CURRENT" ]; then echo "::error::Could not read <Version> from Directory.Build.props"; exit 1; fi
+          echo "Current version: $CURRENT"
+
+          if [ -n "${EXPLICIT}" ]; then
+            NEW="${EXPLICIT#v}"
+          else
+            base="${CURRENT%%-*}"
+            IFS='.' read -r MA MI PA <<< "$base"
+            case "$RELEASE_TYPE" in
+              major)      NEW="$((MA+1)).0.0" ;;
+              minor)      NEW="${MA}.$((MI+1)).0" ;;
+              patch)      NEW="${MA}.${MI}.$((PA+1))" ;;
+              prerelease)
+                if [[ "$CURRENT" == *-"${PRE_ID}".* ]]; then
+                  n="${CURRENT##*.}"
+                  NEW="${base}-${PRE_ID}.$((n+1))"
+                else
+                  NEW="${MA}.${MI}.$((PA+1))-${PRE_ID}.0"
+                fi
+                ;;
+              *) echo "::error::Unknown release_type '$RELEASE_TYPE'"; exit 1 ;;
+            esac
+          fi
+
+          # Validate semver (https://semver.org core + optional pre/build).
+          if ! [[ "$NEW" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$NEW' is not a valid semantic version"; exit 1
+          fi
+          if [ "$NEW" = "$CURRENT" ]; then
+            echo "::error::New version equals current version ($CURRENT)"; exit 1
+          fi
+          # Highest version must be the new one (guards against going backwards).
+          if [ "$(printf '%s\n%s\n' "$CURRENT" "$NEW" | sort -V | tail -1)" != "$NEW" ]; then
+            echo "::error::New version $NEW is not greater than current $CURRENT"; exit 1
+          fi
+
+          TAG="v${NEW}"
+          if git rev-parse "$TAG" >/dev/null 2>&1 || \
+             git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists"; exit 1
+          fi
+
+          echo "version=$NEW"            >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"                >> "$GITHUB_OUTPUT"
+          echo "staging_branch=release-staging/$TAG" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Release $TAG"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Current | \`$CURRENT\` |"
+            echo "| New | \`$NEW\` |"
+            echo "| Bump | \`${EXPLICIT:+explicit }${RELEASE_TYPE}\` |"
+            echo "| Dry run | \`${{ inputs.dry_run }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Bump version in all files
+        env:
+          NEW: ${{ steps.compute.outputs.version }}
+        run: |
+          set -euo pipefail
+          # 1) .NET package version (only the <Version> tag; <TypstVersion> is
+          #    a distinct element and is left untouched).
+          sed -i -E "s|<Version>[^<]+</Version>|<Version>${NEW}</Version>|" Directory.Build.props
+          # 2) Rust crate version (first `version = "..."` line == the [package] one).
+          sed -i -E "0,/^version = \"[^\"]*\"/s//version = \"${NEW}\"/" src/typst_interop/Cargo.toml
+          # 3) The crate's own entry in Cargo.lock (the `version` line directly
+          #    after its `name = "typst_interop"` line).
+          sed -i -E "/^name = \"typst_interop\"$/{n;s/^version = \"[^\"]*\"/version = \"${NEW}\"/}" src/typst_interop/Cargo.lock
+
+          echo "Resulting version lines:"
+          grep -n '<Version>' Directory.Build.props
+          grep -n '^version = ' src/typst_interop/Cargo.toml | head -1
+          grep -n -A1 'name = "typst_interop"' src/typst_interop/Cargo.lock
+
+          # Fail loudly if any file was not updated.
+          grep -q "<Version>${NEW}</Version>" Directory.Build.props
+          grep -q "^version = \"${NEW}\"" src/typst_interop/Cargo.toml
+
+      - name: Commit and push staging branch
+        id: push
+        env:
+          NEW: ${{ steps.compute.outputs.version }}
+          STAGING: ${{ steps.compute.outputs.staging_branch }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$STAGING"
+          git commit -am "release: $NEW"
+          # Force in case a previous failed run left this staging branch behind.
+          git push --force origin "$STAGING"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build
+    needs: prepare
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/_build.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
+
+  finalize:
+    name: Tag release
+    needs: [prepare, build]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Fast-forward main and push tag
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Fast-forward main to the verified commit. Rejected (and the release
+          # aborts) if main advanced since prepare -- we never force main.
+          git push origin "HEAD:refs/heads/main"
+          # Annotated tag on the same verified commit.
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+
+  publish:
+    name: Publish
+    needs: [prepare, build, finalize]
+    if: ${{ !inputs.dry_run }}
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_publish.yml
+    secrets: inherit
+
+  release:
+    name: Create GitHub Release
+    needs: [prepare, build, finalize, publish]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download NuGet Package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: nuget-package
+          path: nupkg
+
+      - name: Download SBOMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: sbom
+          path: sbom
+
+      - name: Generate SHA256 checksums
+        run: |
+          # Checksum every release artifact (nupkgs + SBOMs) into a single
+          # SHA256SUMS file that ships alongside them so consumers can verify
+          # integrity of what they download from the release.
+          sha256sum ./nupkg/* ./sbom/* > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          PRERELEASE=""
+          if [[ "$TAG" == *-* ]]; then PRERELEASE="--prerelease"; fi
+          gh release create "$TAG" ./nupkg/* ./sbom/* SHA256SUMS \
+            --title "$TAG" \
+            --generate-notes $PRERELEASE
+
+  cleanup:
+    name: Delete staging branch
+    needs: [prepare, build, finalize, publish, release]
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: true
+      - name: Delete staging branch
+        env:
+          STAGING: ${{ needs.prepare.outputs.staging_branch }}
+        run: git push origin --delete "$STAGING" || true
