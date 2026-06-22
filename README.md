@@ -22,6 +22,24 @@ It currently embeds **Typst 0.15.0** and targets **.NET 8, 9, 10** and **.NET Fr
 dotnet add package TypstInterop
 ```
 
+### Runtime identifier
+
+The native Typst engine ships in per-platform `TypstInterop.runtime.<rid>` packages that the main package selects through a `runtime.json` RID graph. NuGet only restores those for a **specific runtime identifier**, so a consuming **application** must set one — otherwise the native is never restored and the app throws `DllNotFoundException: typst_interop` at startup.
+
+```xml
+<PropertyGroup>
+  <!-- one RID, or use <RuntimeIdentifiers> for several -->
+  <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+</PropertyGroup>
+```
+
+```bash
+dotnet run     -r linux-x64
+dotnet publish -r linux-x64
+```
+
+Supported RIDs: `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `linux-musl-x64`, `linux-musl-arm64`, `osx-x64`, `osx-arm64`. Building an executable without a RID emits build warning `TYPST0001`. Class libraries don't need a RID — the final application picks it. See [Getting Started](wiki/getting-started.md#set-a-runtimeidentifier) for details.
+
 ## Quick Start
 
 ```csharp

@@ -60,9 +60,31 @@ internal static class NativeLibraryLoader
         {
             return handle;
         }
-        return IntPtr.Zero;
+
+        // Nothing matched. Throw a message that explains the most common cause
+        // (a framework-dependent build with no RuntimeIdentifier, so the
+        // platform's TypstInterop.runtime.<rid> package was never restored)
+        // instead of letting the CLR raise a bare DllNotFoundException.
+        throw new DllNotFoundException(BuildMissingNativeMessage(rid, libFileName, assemblyDir));
     }
 #endif
+
+    private static string BuildMissingNativeMessage(string rid, string libFileName, string? assemblyDir)
+    {
+        var probedPath = assemblyDir != null
+            ? Path.Combine(assemblyDir, "runtimes", rid, "native", libFileName)
+            : "the application directory";
+        return
+            $"TypstInterop could not load its native library '{libFileName}' for runtime identifier '{rid}'. "
+            + $"Expected it at '{probedPath}'. "
+            + $"This usually means the application was built or published without a RuntimeIdentifier, so the "
+            + $"platform-specific 'TypstInterop.runtime.{rid}' package was not restored and the native binary "
+            + $"was never copied next to the assembly. "
+            + $"Set <RuntimeIdentifier>{rid}</RuntimeIdentifier> in your project (or build/run/publish with "
+            + $"'-r {rid}'). See https://github.com/KanarekLife/TypstInterop#runtime-identifier for details. "
+            + $"If '{rid}' is wrong for your platform (for example glibc vs. musl), restore the matching runtime "
+            + $"package instead.";
+    }
 
     private static void LoadForNetFramework()
     {
@@ -113,6 +135,11 @@ internal static class NativeLibraryLoader
                 return;
             }
         }
+
+        // On Windows none of the candidate paths existed or loaded. Surface the
+        // actionable message now rather than letting the first P/Invoke fail
+        // with a bare DllNotFoundException.
+        throw new DllNotFoundException(BuildMissingNativeMessage(rid, libFileName, assemblyDir));
     }
 
     private static string? GetAssemblyDirectory(Assembly assembly)

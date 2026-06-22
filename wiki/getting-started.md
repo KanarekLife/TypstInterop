@@ -8,7 +8,40 @@ Add the package to your project:
 dotnet add package TypstInterop
 ```
 
-The correct native binary for your OS and architecture is pulled in automatically through the companion `TypstInterop.runtime.<rid>` packages. No additional setup is required.
+The correct native binary for your OS and architecture ships in a companion `TypstInterop.runtime.<rid>` package, selected through a `runtime.json` RID graph in the main package.
+
+## Set a RuntimeIdentifier
+
+NuGet only restores a `runtime.json` runtime dependency when your project restores **for a specific runtime identifier (RID)**. A plain framework-dependent build (`dotnet build` / `dotnet run` with no RID) therefore never pulls the native, and the app fails at startup with:
+
+```
+System.DllNotFoundException: Unable to load shared library 'typst_interop' ...
+```
+
+So a consuming **application** must declare the RID(s) it runs on. Set a single RID in the project file:
+
+```xml
+<PropertyGroup>
+  <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+</PropertyGroup>
+```
+
+…or list several and pick one per build/publish:
+
+```xml
+<PropertyGroup>
+  <RuntimeIdentifiers>win-x64;linux-x64;linux-musl-x64;osx-arm64</RuntimeIdentifiers>
+</PropertyGroup>
+```
+
+```bash
+dotnet run     -r linux-x64
+dotnet publish -r linux-x64
+```
+
+Supported RIDs: `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `linux-musl-x64` (Alpine), `linux-musl-arm64` (Alpine), `osx-x64`, `osx-arm64`.
+
+> If you build an executable without a RID, the package emits build warning **`TYPST0001`** to catch this before runtime. Class-library projects don't warn — they defer the RID choice to the final app. Suppress with `<TypstInteropSuppressRuntimeIdentifierWarning>true</TypstInteropSuppressRuntimeIdentifierWarning>`, or turn it into a hard error with `<TypstInteropTreatMissingRuntimeIdentifierAsError>true</TypstInteropTreatMissingRuntimeIdentifierAsError>`.
 
 ## Your first PDF
 
