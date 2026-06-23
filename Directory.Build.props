@@ -8,7 +8,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageTags>typst;pdf;interop;native</PackageTags>
     <Title>TypstInterop</Title>
-    <Version>2.0.1</Version>
+    <Version>2.0.2</Version>
 
     <!-- Keep in sync with the typst crate version in typst_interop/Cargo.toml
          and typst_version() in src/lib.rs. -->
