@@ -32,4 +32,45 @@
     <None Include="../../LICENSE" Pack="true" PackagePath="/" />
     <None Include="../../README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
+
+  <!--
+    Non-SDK / .NET Framework projects don't resolve runtimes/<rid>/native/* and
+    never copy the native binary to the output dir, so a net48 consumer hits
+    DllNotFoundException 'typst_interop' at startup. SDK-style projects handle
+    this themselves via the RID asset resolution.
+
+    NuGet auto-imports buildTransitive/<package-id>.targets for direct and
+    transitive consumers. The package id is RID-specific
+    (TypstInterop.runtime.<rid>), so the targets file name and the native path /
+    file name it references are generated per RID here, then packed.
+  -->
+  <Target Name="GenerateNativeCopyTargets" BeforeTargets="GenerateNuspec;_GetPackageFiles">
+    <PropertyGroup>
+      <_NativeFileName Condition="$(RuntimeIdentifier.StartsWith('win'))">typst_interop.dll</_NativeFileName>
+      <_NativeFileName Condition="$(RuntimeIdentifier.StartsWith('osx'))">libtypst_interop.dylib</_NativeFileName>
+      <_NativeFileName Condition="'$(_NativeFileName)' == ''">libtypst_interop.so</_NativeFileName>
+
+      <NativeCopyTargetsPath>$(IntermediateOutputPath)TypstInterop.runtime.$(RuntimeIdentifier).targets</NativeCopyTargetsPath>
+      <NativeCopyTargetsContent>
+&lt;Project&gt;
+  &lt;!-- Non-SDK / .NET Framework projects don't resolve runtimes/&lt;rid&gt;/native/*.
+       Copy the native lib to the output dir explicitly. --&gt;
+  &lt;ItemGroup Condition="'%24(TargetFrameworkIdentifier)' == '.NETFramework'"&gt;
+    &lt;None Include="%24(MSBuildThisFileDirectory)..\runtimes\$(RuntimeIdentifier)\native\$(_NativeFileName)"&gt;
+      &lt;Link&gt;$(_NativeFileName)&lt;/Link&gt;
+      &lt;CopyToOutputDirectory&gt;PreserveNewest&lt;/CopyToOutputDirectory&gt;
+      &lt;Visible&gt;false&lt;/Visible&gt;
+    &lt;/None&gt;
+  &lt;/ItemGroup&gt;
+&lt;/Project&gt;
+</NativeCopyTargetsContent>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(NativeCopyTargetsPath)" Lines="$(NativeCopyTargetsContent)" Overwrite="true" />
+    <ItemGroup>
+      <None Include="$(NativeCopyTargetsPath)"
+            Pack="true"
+            PackagePath="buildTransitive/TypstInterop.runtime.$(RuntimeIdentifier).targets"
+            Visible="false" />
+    </ItemGroup>
+  </Target>
 </Project>
