@@ -28,7 +28,7 @@
 #       --filter "FullyQualifiedName!~Integration"
 # ---------------------------------------------------------------------------
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:548d93f8a18a1acbe6cc127bc4f47281430d34a9e35c18afa80a8d6741c2adc3
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:ea8bde36c11b6e7eec2656d0e59101d4462f6bd630730f2c8201ed0572b295d5
 
 # rustup/cargo are installed system-wide. RUSTUP_HOME stays fixed so the
 # toolchain is shared by all users, and the cargo bin dir is on PATH. We do NOT
