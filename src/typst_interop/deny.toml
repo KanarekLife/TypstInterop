@@ -7,7 +7,14 @@
 [advisories]
 # Security vulnerabilities and unsound advisories always fail the check; use the
 # `ignore` list (with a rationale) to suppress a specific advisory if needed.
-ignore = []
+# RUSTSEC-2026-0194 (quadratic duplicate-attribute check) and RUSTSEC-2026-0195
+# (unbounded namespace-declaration allocation): DoS issues in quick-xml < 0.41.
+# Pulled in via typst-library -> hayagriva -> citationberg 0.7.0, which pins
+# quick-xml 0.38; no citationberg release on quick-xml >= 0.41 exists yet.
+# Worst case here is a slow/heavy compile on a malicious CSL style. Remove once
+# citationberg/hayagriva/typst ship the bump. Keep in sync with
+# .cargo/audit.toml.
+ignore = ["RUSTSEC-2026-0194", "RUSTSEC-2026-0195"]
 # Only flag unmaintained crates that are workspace members. The Typst dependency
 # tree pulls in transitively unmaintained crates (e.g. paste, yaml-rust) that we
 # cannot drop on our own, so checking the whole tree would block every PR.

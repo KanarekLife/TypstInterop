@@ -1,0 +1,8 @@
+# cargo-audit configuration for the typst_interop crate. CI runs a bare
+# `cargo audit` in this directory — see .github/workflows/security.yml.
+
+[advisories]
+# RUSTSEC-2026-0194 and RUSTSEC-2026-0195: DoS issues in quick-xml < 0.41.
+# Unfixable on our side until citationberg (via typst-library -> hayagriva)
+# releases against quick-xml >= 0.41; see the matching entries in deny.toml.
+ignore = ["RUSTSEC-2026-0194", "RUSTSEC-2026-0195"]
