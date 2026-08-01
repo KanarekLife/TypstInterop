@@ -25,7 +25,7 @@ We searched nuget.org and the web for "typst nuget", "typst dotnet",
 
 | Package | Approach | Latest version | Frameworks | Included? |
 |---|---|---|---|---|
-| **TypstInterop** (this library) | Managed C# over a Rust cdylib (P/Invoke). In-memory virtual file system; caches a Typst *world* (fonts + package cache) per compiler instance and resets it between compilations. | wraps Typst 0.15.0 | net10.0; net48 | Yes (baseline) |
+| **TypstInterop** (this library) | Managed C# over a Rust cdylib (P/Invoke). In-memory virtual file system; caches a Typst *world* (fonts + package cache) per compiler instance and resets it between compilations. | wraps Typst 0.15.1 | net10.0; net48 | Yes (baseline) |
 | **[typstsharp](https://www.nuget.org/packages/typstsharp)** ([repo](https://github.com/evolvedlight/typstsharp)) | Managed C# over a Rust `rust_core` cdylib (P/Invoke, generated with `csbindgen`). Source bound to the compiler instance via `TypstCompiler.FromSource(...)`; external files read from an on-disk `root`. Ships native binaries inside the package. | 0.14.2.2 (Feb 2026) | net8.0; net9.0; net10.0 | Yes (net10.0) |
 | **[Typst.Net](https://www.nuget.org/packages/Typst.Net)** ([libraries.io](https://libraries.io/nuget/Typst.Net)) | Managed C# over a Rust FFI layer. `new TypstCompiler(source)` then `Compile()` returning `(pages, warnings)`. AI-generated codebase, explicitly flagged as not production-reviewed. | 0.1.1-typst0.13.1 (prerelease, Aug 2025) | net8.0 | No — see below |
 

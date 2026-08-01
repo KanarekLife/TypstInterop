@@ -12,7 +12,7 @@ public class CompilationTests
     [Fact]
     public void Version_ReturnsCorrectValue()
     {
-        Assert.Equal("0.15.0", TypstCompiler.TypstVersion);
+        Assert.Equal("0.15.1", TypstCompiler.TypstVersion);
     }
 
     [Fact]

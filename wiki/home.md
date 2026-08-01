@@ -2,7 +2,7 @@
 
 TypstInterop is a high-performance .NET bridge for [Typst](https://typst.app/), the modern document markup language. It links the Typst compilation engine directly into your process, so you can generate PDFs (and PNG, SVG, or HTML) from C# without shelling out to a CLI or depending on external services.
 
-It currently embeds **Typst 0.15.0**.
+It currently embeds **Typst 0.15.1**.
 
 ## Features
 
