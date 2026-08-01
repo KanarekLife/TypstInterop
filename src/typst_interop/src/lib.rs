@@ -466,7 +466,7 @@ pub struct Diagnostic {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn typst_version() -> *mut c_char {
-    let version = "0.15.0";
+    let version = "0.15.1";
     CString::new(version).unwrap().into_raw()
 }
 

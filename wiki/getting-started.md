@@ -102,13 +102,13 @@ using var stream = result.Output.ToStream();
 ## Checking the embedded Typst version
 
 ```csharp
-Console.WriteLine(TypstCompiler.TypstVersion); // "0.15.0"
+Console.WriteLine(TypstCompiler.TypstVersion); // "0.15.1"
 ```
 
 The same value is available as an instance property on `ITypstCompiler`, which forwards to `TypstCompiler.TypstVersion`:
 
 ```csharp
-Console.WriteLine(compiler.Version); // "0.15.0"
+Console.WriteLine(compiler.Version); // "0.15.1"
 ```
 
 ## Reusing a compiler
