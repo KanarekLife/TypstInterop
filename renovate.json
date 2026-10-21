@@ -37,9 +37,7 @@
         "cargo"
       ],
       "matchPackageNames": [
-        "typst",
-        "typst-pdf",
-        "typst-kit"
+        "/^typst(-|$)/"
       ],
       "groupName": "typst",
       "automerge": false
@@ -50,10 +48,8 @@
         "nuget"
       ],
       "matchPackageNames": [
-        "xunit",
-        "xunit.runner.visualstudio",
-        "Microsoft.NET.Test.Sdk",
-        "coverlet.collector"
+        "/^xunit\\.v3/",
+        "/^Microsoft\\.Testing\\./"
       ],
       "groupName": "dotnet test dependencies"
     },
@@ -75,6 +71,16 @@
         "github-actions"
       ],
       "groupName": "github-actions"
+    },
+    {
+      "description": "Bump the .NET SDK container image in one PR across the Dockerfile and workflows.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "mcr.microsoft.com/dotnet/sdk"
+      ],
+      "groupName": "dotnet sdk image"
     }
   ],
   "platformAutomerge": true,
