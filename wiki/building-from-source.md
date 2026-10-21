@@ -28,7 +28,7 @@ dotnet restore TypstInterop.slnx
 Run the test suite, skipping the slower integration tests:
 
 ```bash
-dotnet test --filter "FullyQualifiedName!~Integration"
+dotnet test --project src/TypstInterop.Tests --filter-not-namespace "TypstInterop.Tests.Integration"
 ```
 
 Run everything, including integration tests:

@@ -24,8 +24,8 @@
 #   dotnet format --verify-no-changes
 #   cargo fmt --all -- --check          # (cd src/typst_interop)
 #   cargo clippy --all-targets -- -D warnings
-#   dotnet test src/TypstInterop.Tests/TypstInterop.Tests.csproj \
-#       --filter "FullyQualifiedName!~Integration"
+#   dotnet test --project src/TypstInterop.Tests/TypstInterop.Tests.csproj \
+#       --filter-not-namespace "TypstInterop.Tests.Integration"
 # ---------------------------------------------------------------------------
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:548d93f8a18a1acbe6cc127bc4f47281430d34a9e35c18afa80a8d6741c2adc3

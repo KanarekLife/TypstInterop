@@ -163,8 +163,8 @@ jobs:
       # (Typst Universe) and are excluded to keep the gate deterministic.
       - name: Run tests
         run: |
-          dotnet test src/TypstInterop.Tests/TypstInterop.Tests.csproj -f net10.0 --filter "FullyQualifiedName!~Integration"
-          dotnet test src/TypstInterop.Tests/TypstInterop.Tests.csproj -f net8.0 --filter "FullyQualifiedName!~Integration"
+          dotnet test --project src/TypstInterop.Tests/TypstInterop.Tests.csproj -f net10.0 --filter-not-namespace "TypstInterop.Tests.Integration"
+          dotnet test --project src/TypstInterop.Tests/TypstInterop.Tests.csproj -f net8.0 --filter-not-namespace "TypstInterop.Tests.Integration"
 
   build-native:
     name: Build Native (${{ matrix.rid }})
