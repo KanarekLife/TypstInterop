@@ -6,25 +6,49 @@
     ":semanticCommits",
     "helpers:pinGitHubActionDigests"
   ],
-  "labels": ["dependencies"],
+  "labels": [
+    "dependencies"
+  ],
   "minimumReleaseAge": "14 days",
   "internalChecksFilter": "strict",
   "prHourlyLimit": 0,
   "prConcurrentLimit": 10,
   "lockFileMaintenance": {
     "enabled": true,
-    "schedule": ["before 6am on monday"]
+    "schedule": [
+      "before 6am on monday"
+    ],
+    "automerge": true
   },
   "packageRules": [
     {
-      "description": "Bump the entire Typst crate family together; they share a version and must stay in lockstep.",
-      "matchManagers": ["cargo"],
-      "matchPackageNames": ["typst", "typst-pdf", "typst-kit"],
-      "groupName": "typst"
+      "description": "Automerge non-major updates once required checks pass; majors stay manual.",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "digest"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "Bump the entire Typst crate family together; they share a version and must stay in lockstep. Typst 0.x minors are breaking, so never automerge.",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchPackageNames": [
+        "typst",
+        "typst-pdf",
+        "typst-kit"
+      ],
+      "groupName": "typst",
+      "automerge": false
     },
     {
       "description": "Group the .NET test toolchain into a single PR.",
-      "matchManagers": ["nuget"],
+      "matchManagers": [
+        "nuget"
+      ],
       "matchPackageNames": [
         "xunit",
         "xunit.runner.visualstudio",
@@ -35,7 +59,9 @@
     },
     {
       "description": "Group the .NET Framework / netstandard compatibility shims.",
-      "matchManagers": ["nuget"],
+      "matchManagers": [
+        "nuget"
+      ],
       "matchPackageNames": [
         "System.Memory",
         "System.Buffers",
@@ -45,8 +71,19 @@
     },
     {
       "description": "Group GitHub Actions updates.",
-      "matchManagers": ["github-actions"],
+      "matchManagers": [
+        "github-actions"
+      ],
       "groupName": "github-actions"
     }
-  ]
+  ],
+  "platformAutomerge": true,
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "labels": [
+      "dependencies",
+      "security"
+    ],
+    "automerge": true
+  }
 }
