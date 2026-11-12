@@ -199,22 +199,15 @@ jobs:
     steps:
       # main is protected by a ruleset with required status checks, which the
       # staging commit never collects (the security workflows don't run on it)
-      # and which GITHUB_TOKEN cannot bypass. Push as the dedicated release
-      # GitHub App instead -- it is the ruleset's bypass actor. Scoped to
-      # contents:write on this repository only.
-      - name: Mint release app token
-        id: app-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          permission-contents: write
-
+      # and which GITHUB_TOKEN cannot bypass. Push over SSH with the release
+      # deploy key instead: it is write-scoped to this repository only and is
+      # the ruleset's bypass actor (personal-account rulesets accept only
+      # repository admins and deploy keys as bypass actors, not GitHub Apps).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
           persist-credentials: true
 
       - name: Fast-forward main and push tag
