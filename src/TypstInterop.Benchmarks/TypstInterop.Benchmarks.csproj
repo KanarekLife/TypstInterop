@@ -4,12 +4,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageReference Include="BenchmarkDotNet" Version="0.16.0-preview.2" />
   </ItemGroup>
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFrameworks>net10.0;net48</TargetFrameworks>
+    <TargetFrameworks>net11.0;net10.0;net48</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -21,27 +21,28 @@
   </ItemGroup>
 
   <!-- Competitor: typstsharp (https://github.com/evolvedlight/typstsharp).
-       Scoped to net10.0 only: the package targets net8.0/9.0/10.0 and ships
-       native (P/Invoke) binaries, so it is not usable on net48. The
+       Scoped to the .NET (Core) TFMs: the package targets net8.0/9.0/10.0 (net11.0
+       resolves to its net10.0 asset) and ships native (P/Invoke) binaries, so it
+       is not usable on net48. The
        HAS_TYPSTSHARP symbol guards CompetitorBenchmarks.cs - drop this
        ItemGroup and the suite still builds/runs without the competitor rows.
 
        The version is overridable (-p:TypstSharpVersion=0.14.1) so you can
        compare across typstsharp releases - see wiki/Benchmarks.md for the
        exact command.
-       Default is 0.14.2: it is the most recent release that ships a
-       linux-x64 native binary. The very latest, 0.14.2.2, regressed to
-       shipping ONLY win-x64, so it cannot execute on Linux/macOS. Versions
-       known to ship linux-x64 + win-x64: 0.14.2, 0.14.1, 0.0.8.
+       Default is 0.15.1.3: it wraps the same Typst version (0.15.1) as this
+       library, and ships linux-x64 + win-x64 natives (no macOS / arm64).
+       0.14.2.2 shipped ONLY win-x64; other versions known to ship linux-x64 +
+       win-x64: 0.15.1.1, 0.14.2, 0.14.1, 0.0.8.
        The FromSource(source, fonts, sysInputs, root) API used here is stable
-       across 0.14.1 / 0.14.2 / 0.14.2.2. -->
+       across 0.14.1 through 0.15.1.3. -->
   <PropertyGroup>
-    <TypstSharpVersion Condition="'$(TypstSharpVersion)' == ''">0.14.2</TypstSharpVersion>
+    <TypstSharpVersion Condition="'$(TypstSharpVersion)' == ''">0.15.1.3</TypstSharpVersion>
   </PropertyGroup>
-  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+  <ItemGroup Condition="'$(TargetFramework)' != '' and $([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">
     <PackageReference Include="typstsharp" Version="$(TypstSharpVersion)" />
   </ItemGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+  <PropertyGroup Condition="'$(TargetFramework)' != '' and $([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">
     <DefineConstants>$(DefineConstants);HAS_TYPSTSHARP</DefineConstants>
   </PropertyGroup>
 </Project>

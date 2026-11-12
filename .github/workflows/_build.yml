@@ -86,12 +86,12 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
 
-      # The .NET 10 SDK is baked into the image. setup-dotnet still pins the
+      # The .NET 11 SDK is baked into the image. setup-dotnet still pins the
       # exact channel so the version set stays consistent with the rest of CI.
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '11.0.x'
 
       # Rust (stable + rustfmt/clippy) is preinstalled in the CI image.
 
@@ -135,13 +135,15 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
 
-      # The .NET 10 SDK is baked into the image; setup-dotnet adds 8.0.
+      # The .NET 11 SDK is baked into the image; setup-dotnet adds the 8.0 and
+      # 10.0 runtimes the older test TFMs execute on.
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: |
             8.0.x
             10.0.x
+            11.0.x
 
       # Rust (stable) is preinstalled in the CI image.
 
@@ -163,6 +165,7 @@ jobs:
       # (Typst Universe) and are excluded to keep the gate deterministic.
       - name: Run tests
         run: |
+          dotnet test --project src/TypstInterop.Tests/TypstInterop.Tests.csproj -f net11.0 --filter-not-namespace "TypstInterop.Tests.Integration"
           dotnet test --project src/TypstInterop.Tests/TypstInterop.Tests.csproj -f net10.0 --filter-not-namespace "TypstInterop.Tests.Integration"
           dotnet test --project src/TypstInterop.Tests/TypstInterop.Tests.csproj -f net8.0 --filter-not-namespace "TypstInterop.Tests.Integration"
 
@@ -239,6 +242,12 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
+
+      # Bare runners may not ship the SDK that global.json pins.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '11.0.x'
 
       # All native builds run on bare runners (no container), so install Rust.
       - name: Set up Rust
@@ -325,14 +334,12 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
 
-      # The .NET 10 SDK is baked into the image; setup-dotnet adds 8.0 and 9.0.
+      # The .NET 11 SDK is baked into the image and builds every TFM (including
+      # net8.0/net10.0 via targeting packs); setup-dotnet pins the channel.
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
-          dotnet-version: |
-            8.0.x
-            9.0.x
-            10.0.x
+          dotnet-version: '11.0.x'
 
       - name: Download All Native Binaries
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
@@ -389,11 +396,11 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
 
-      # The .NET 10 SDK is baked into the image; Rust (stable) is preinstalled.
+      # The .NET 11 SDK is baked into the image; Rust (stable) is preinstalled.
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '11.0.x'
 
       - name: Cache Cargo
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

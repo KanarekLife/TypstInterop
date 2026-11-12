@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <!-- netstandard2.0: baseline (legacy loader). net8.0: modern NativeLibrary
-         resolver, also serves net9/net10. net48: scopes deps to Windows runtimes. -->
+         resolver, also serves net9/net10/net11. net48: scopes deps to Windows runtimes. -->
     <TargetFrameworks>netstandard2.0;net8.0;net48</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -15,7 +15,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.403" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.404" PrivateAssets="All" />
   </ItemGroup>
 
   <!-- Ship an MSBuild warning that fires when a consumer builds an executable

@@ -2,10 +2,10 @@ use chrono::{Datelike, Timelike};
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use typst::diag::{FileError, FileResult, Severity, SourceDiagnostic, Warned};
-use typst::ecow::{EcoString, EcoVec};
+use typst::ecow::{EcoString, EcoVec, eco_format};
 use typst::foundations::{Bytes, Datetime, Dict, Value};
 use typst::syntax::package::PackageSpec;
-use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
+use typst::syntax::{FileId, RootedPath, Source, Span, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook, FontInfo};
 use typst::utils::{LazyHash, Scalar};
 use typst::{Feature, Features, Library, LibraryExt, World, WorldExt};
@@ -137,6 +137,10 @@ pub struct VfsWorld {
     /// Optional real filesystem root for the project namespace. When set,
     /// project files not provided in-memory are read from disk relative to it.
     root_path: Option<std::path::PathBuf>,
+    /// Test hook: when set, the next `typst_compile` panics on purpose so the
+    /// FFI panic guard can be exercised. Only settable in debug builds via
+    /// `typst_debug_panic_next_compile`.
+    debug_panic_next_compile: bool,
 }
 
 impl VfsWorld {
@@ -173,6 +177,7 @@ impl VfsWorld {
             packages_source,
             fonts_source,
             root_path,
+            debug_panic_next_compile: false,
         }
     }
 
@@ -366,8 +371,16 @@ impl World for VfsWorld {
         self.font_store.font(index)
     }
 
-    fn today(&self, _offset: Option<typst::foundations::Duration>) -> Option<Datetime> {
-        let now = chrono::Local::now();
+    fn today(&self, offset: Option<typst::foundations::Duration>) -> Option<Datetime> {
+        // Mirror the Typst CLI: no offset means the local time zone, otherwise
+        // UTC shifted by the requested offset (whole hours in Typst).
+        let now = match offset {
+            None => chrono::Local::now().naive_local(),
+            Some(offset) => {
+                let seconds = offset.seconds().round() as i64;
+                chrono::Utc::now().naive_utc() + chrono::Duration::try_seconds(seconds)?
+            }
+        };
         Datetime::from_ymd_hms(
             now.year(),
             now.month() as u8,
@@ -382,6 +395,45 @@ impl World for VfsWorld {
 // C API
 use libc::{c_char, c_uchar, size_t};
 use std::ffi::{CStr, CString};
+use std::panic::{AssertUnwindSafe, catch_unwind};
+
+/// Runs `f`, converting a Rust panic into `fallback` instead of letting it
+/// unwind into the .NET runtime (which is undefined behaviour / an abort).
+///
+/// `AssertUnwindSafe` is sound here: on panic the only state that may be left
+/// half-updated is the `VfsWorld`, and every compile starts with `reset()`.
+fn ffi_guard<T>(fallback: impl FnOnce() -> T, f: impl FnOnce() -> T) -> T {
+    catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|_| fallback())
+}
+
+/// Extracts the message from a panic payload (`&str` or `String`).
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "unknown panic".to_string())
+}
+
+/// A failed result carrying a single error diagnostic describing a panic.
+fn panic_result(payload: &(dyn std::any::Any + Send)) -> CompilationResult {
+    let message = format!(
+        "the Typst compiler panicked: {}. This is a bug in Typst or TypstInterop; \
+         the compiler instance is still usable.",
+        panic_message(payload)
+    );
+    let mut diags = vec![Diagnostic {
+        severity: 0,
+        message: string_to_cstr(&message),
+        file_path: std::ptr::null_mut(),
+        line: 0,
+        column: 0,
+        hints: std::ptr::null_mut(),
+    }];
+    let ptr = diags.as_mut_ptr();
+    std::mem::forget(diags);
+    failure_result((ptr, 1))
+}
 
 /// Output formats supported by the unified compile entry point.
 /// `FORMAT_PDF` (0) is the implicit default handled by the catch-all arm.
@@ -490,15 +542,17 @@ pub unsafe extern "C" fn typst_context_new(
     let data_path = unsafe { cstr_to_pathbuf(data_path) };
     let root_path = unsafe { cstr_to_pathbuf(root_path) };
 
-    let world = VfsWorld::new(
-        main_path,
-        packages_source,
-        fonts_source,
-        cache_path,
-        data_path,
-        root_path,
-    );
-    Box::into_raw(Box::new(world))
+    ffi_guard(std::ptr::null_mut, || {
+        let world = VfsWorld::new(
+            main_path,
+            packages_source,
+            fonts_source,
+            cache_path,
+            data_path,
+            root_path,
+        );
+        Box::into_raw(Box::new(world))
+    })
 }
 
 /// Free a VfsWorld.
@@ -585,7 +639,7 @@ pub unsafe extern "C" fn typst_add_font(
 ) {
     let world = unsafe { &mut *world };
     let data = unsafe { std::slice::from_raw_parts(data, data_len).to_vec() };
-    world.add_font(data);
+    ffi_guard(|| (), || world.add_font(data));
 }
 
 /// Set an input variable in the VfsWorld.
@@ -684,7 +738,7 @@ pub unsafe extern "C" fn typst_set_package_file(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typst_list_fonts(world: *mut VfsWorld) -> *mut c_char {
     let world = unsafe { &*world };
-    let names = world.font_families();
+    let names = ffi_guard(Vec::new, || world.font_families());
     if names.is_empty() {
         return std::ptr::null_mut();
     }
@@ -863,14 +917,21 @@ pub unsafe extern "C" fn typst_compile(
     let world = unsafe { &mut *world };
     let opts = unsafe { &*options };
 
-    // Rebuild the standard library if inputs changed since the last compile.
-    world.prepare();
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        if std::mem::take(&mut world.debug_panic_next_compile) {
+            panic!("debug panic requested via typst_debug_panic_next_compile");
+        }
 
-    let result = if opts.format == FORMAT_HTML {
-        unsafe { compile_html(world) }
-    } else {
-        unsafe { compile_paged(world, opts) }
-    };
+        // Rebuild the standard library if inputs changed since the last compile.
+        world.prepare();
+
+        if opts.format == FORMAT_HTML {
+            compile_html(world, opts.pretty != 0)
+        } else {
+            unsafe { compile_paged(world, opts) }
+        }
+    }))
+    .unwrap_or_else(|payload| panic_result(payload.as_ref()));
 
     // Bound the global comemo memoization cache. Without this, the cache grows
     // without limit across compiles on a reused compiler. Matches the CLI.
@@ -885,7 +946,7 @@ unsafe fn compile_paged(world: &VfsWorld, opts: &CompileOptions) -> CompilationR
     match output {
         Ok(mut document) => {
             let export: Result<Vec<Vec<u8>>, EcoVec<SourceDiagnostic>> = match opts.format {
-                FORMAT_PNG => Ok(render_png(&document, opts.ppi)),
+                FORMAT_PNG => render_png(&document, opts.ppi),
                 FORMAT_SVG => Ok(render_svg(&document, opts.pretty != 0)),
                 _ => {
                     unsafe { apply_metadata(&mut document, opts) };
@@ -904,10 +965,10 @@ unsafe fn compile_paged(world: &VfsWorld, opts: &CompileOptions) -> CompilationR
 }
 
 /// Compiles the document to a single HTML string.
-unsafe fn compile_html(world: &VfsWorld) -> CompilationResult {
+fn compile_html(world: &VfsWorld, pretty: bool) -> CompilationResult {
     let Warned { output, warnings } = typst::compile::<HtmlDocument>(world);
     match output {
-        Ok(document) => match typst_html::html(&document, &HtmlOptions { pretty: true }) {
+        Ok(document) => match typst_html::html(&document, &HtmlOptions { pretty }) {
             Ok(html) => {
                 let outputs: Vec<Vec<u8>> = vec![html.into_bytes()];
                 success_result(outputs, build_diagnostics(world, &[], &warnings))
@@ -919,21 +980,34 @@ unsafe fn compile_html(world: &VfsWorld) -> CompilationResult {
 }
 
 /// Renders every page of the document to a PNG, returning one buffer per page.
-fn render_png(document: &PagedDocument, ppi: f32) -> Vec<Vec<u8>> {
+///
+/// Fails (rather than silently dropping the page) if any page cannot be
+/// encoded, so the output count always matches the page count.
+fn render_png(
+    document: &PagedDocument,
+    ppi: f32,
+) -> Result<Vec<Vec<u8>>, EcoVec<SourceDiagnostic>> {
     let ppi = if ppi <= 0.0 { 144.0 } else { ppi };
     let options = RenderOptions {
         // `render` works in pixels per point; 1 inch = 72 points.
         pixel_per_pt: Scalar::new((ppi / 72.0) as f64),
         ..Default::default()
     };
-    let mut buffers = Vec::with_capacity(document.pages().len());
-    for page in document.pages() {
-        let pixmap = typst_render::render(page, &options);
-        if let Ok(data) = pixmap.encode_png() {
-            buffers.push(data);
-        }
-    }
-    buffers
+    document
+        .pages()
+        .iter()
+        .enumerate()
+        .map(|(i, page)| {
+            typst_render::render(page, &options)
+                .encode_png()
+                .map_err(|e| {
+                    EcoVec::from([SourceDiagnostic::error(
+                        Span::detached(),
+                        eco_format!("failed to encode page {} as PNG: {e}", i + 1),
+                    )])
+                })
+        })
+        .collect()
 }
 
 /// Renders every page of the document to an SVG, returning one buffer per page.
@@ -947,6 +1021,19 @@ fn render_svg(document: &PagedDocument, pretty: bool) -> Vec<Vec<u8>> {
         .iter()
         .map(|page| typst_svg::svg(page, &options).into_bytes())
         .collect()
+}
+
+/// Test hook (debug builds only): makes the next `typst_compile` on `world`
+/// panic, to exercise the FFI panic guard end to end.
+///
+/// # Safety
+///
+/// The `world` pointer must be valid.
+#[cfg(debug_assertions)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typst_debug_panic_next_compile(world: *mut VfsWorld) {
+    let world = unsafe { &mut *world };
+    world.debug_panic_next_compile = true;
 }
 
 /// Free a compilation result and all owned buffers/diagnostics.

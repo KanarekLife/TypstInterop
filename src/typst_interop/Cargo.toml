@@ -34,7 +34,9 @@ csbindgen = "1.9"
 opt-level = "z"
 lto = true
 codegen-units = 1
-panic = "abort"
+# Unwind (the default) so panics can be caught at the FFI boundary in lib.rs
+# instead of aborting the host .NET process.
+panic = "unwind"
 strip = true
 
 # Speed-favoring variant of the release profile for the compiler hot path.

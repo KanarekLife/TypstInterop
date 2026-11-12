@@ -8,7 +8,7 @@ namespace TypstInterop.Internal;
 
 internal static class NativeLibraryLoader
 {
-    private static bool _initialized = false;
+    private static volatile bool _initialized;
     private static readonly object Lock = new();
 
     public static void Initialize()
@@ -20,7 +20,7 @@ internal static class NativeLibraryLoader
             if (_initialized)
                 return;
 
-#if NETCOREAPP3_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER || NET9_0_OR_GREATER || NET10_0_OR_GREATER
+#if NETCOREAPP3_0_OR_GREATER
             NativeLibrary.SetDllImportResolver(
                 typeof(NativeLibraryLoader).Assembly,
                 ResolveDllImport
@@ -32,7 +32,7 @@ internal static class NativeLibraryLoader
         }
     }
 
-#if NETCOREAPP3_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER || NET9_0_OR_GREATER || NET10_0_OR_GREATER
+#if NETCOREAPP3_0_OR_GREATER
     private static IntPtr ResolveDllImport(
         string libraryName,
         Assembly assembly,

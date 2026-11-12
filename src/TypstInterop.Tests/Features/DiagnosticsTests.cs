@@ -57,4 +57,24 @@ public class DiagnosticsTests
         Assert.Contains("main.typ", error.ToString());
         Assert.Contains("error", error.ToString());
     }
+
+#if DEBUG
+    [Fact]
+    public void NativePanic_SurfacesAsFailedResult_AndCompilerStaysUsable()
+    {
+        // Without the FFI panic guard this would abort the whole test process.
+        using var compiler = new TypstCompiler();
+        compiler.DebugPanicOnNextCompile();
+
+        var crashed = compiler.Compile(c => c.WithSource("= Hello"));
+
+        Assert.False(crashed.IsSuccess);
+        var error = Assert.Single(crashed.Errors);
+        Assert.Contains("panicked", error.Message);
+        Assert.Contains("debug panic requested", error.Message);
+
+        var recovered = compiler.Compile(c => c.WithSource("= Hello again"));
+        Assert.True(recovered.IsSuccess, recovered.ErrorMessage);
+    }
+#endif
 }

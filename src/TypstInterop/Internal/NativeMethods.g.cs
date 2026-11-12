@@ -156,6 +156,17 @@ namespace TypstInterop.Internal
         internal static extern CompilationResult typst_compile(VfsWorld* world, CompileOptions* options);
 
         /// <summary>
+        ///  Test hook (debug builds only): makes the next `typst_compile` on `world`
+        ///  panic, to exercise the FFI panic guard end to end.
+        ///
+        ///  # Safety
+        ///
+        ///  The `world` pointer must be valid.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "typst_debug_panic_next_compile", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern void typst_debug_panic_next_compile(VfsWorld* world);
+
+        /// <summary>
         ///  Free a compilation result and all owned buffers/diagnostics.
         ///
         ///  # Safety

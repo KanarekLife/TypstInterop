@@ -66,6 +66,16 @@
       "groupName": "dotnet compatibility shims"
     },
     {
+      "description": "SourceLink 11+ pulls System.IO.Hashing 11, which warns on the net8.0 TFM. Stay on 10.x until net8.0 is dropped.",
+      "matchManagers": [
+        "nuget"
+      ],
+      "matchPackageNames": [
+        "Microsoft.SourceLink.GitHub"
+      ],
+      "allowedVersions": "<11.0.0"
+    },
+    {
       "description": "Group GitHub Actions updates.",
       "matchManagers": [
         "github-actions"

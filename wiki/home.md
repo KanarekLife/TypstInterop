@@ -13,7 +13,7 @@ It currently embeds **Typst 0.15.1**.
 - **On-disk project root** — compile a real Typst project directory via `WithRoot` / `RootPath`.
 - **Font listing** — enumerate available font families with `ListFonts`.
 - **Fluent API** — configure each compilation job with a small, chainable builder.
-- **Broad target support** — .NET 8, 9, 10, and .NET Framework 4.8.
+- **Broad target support** — .NET 8, 9, 10, 11, and .NET Framework 4.8.
 - **Cross-platform** — Windows, Linux (glibc and musl/Alpine), and macOS on x64 and arm64 (musl is x64-only; .NET Framework is Windows-only).
 - **Deterministic & offline-capable** — control package and font resolution, or turn the network off entirely.
 
@@ -33,6 +33,7 @@ The matching native binary is delivered automatically through per-RID `TypstInte
 | `net8.0` | Cross-platform (Windows / Linux / macOS, x64 + arm64) |
 | `net9.0` | Cross-platform |
 | `net10.0` | Cross-platform |
+| `net11.0` | Cross-platform |
 | `net48` (.NET Framework 4.8) | Windows only |
 
 ## Documentation

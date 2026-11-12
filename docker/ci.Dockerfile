@@ -4,7 +4,7 @@
 # Rust toolchain, because building the library invokes `cargo` from the MSBuild
 # `BuildRust` target (so lint / test / native-build / pack all need both).
 #
-# Base: official Microsoft .NET SDK 10.0 image. The .NET 8.0 and 9.0 SDKs that
+# Base: official Microsoft .NET SDK 11.0 image. The .NET 8.0 and 10.0 SDKs that
 # some jobs also need are still installed via `actions/setup-dotnet` in the
 # workflow (side-by-side), so the SDK version set stays in one place and
 # matches the non-containerized configuration exactly.
@@ -28,7 +28,7 @@
 #       --filter-not-namespace "TypstInterop.Tests.Integration"
 # ---------------------------------------------------------------------------
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:548d93f8a18a1acbe6cc127bc4f47281430d34a9e35c18afa80a8d6741c2adc3
+FROM mcr.microsoft.com/dotnet/sdk:11.0@sha256:65f3c7c6a25a239ab3e6719f2896147e7b68242ff2d8818dd70498bde6ef8bea
 
 # rustup/cargo are installed system-wide. RUSTUP_HOME stays fixed so the
 # toolchain is shared by all users, and the cargo bin dir is on PATH. We do NOT
