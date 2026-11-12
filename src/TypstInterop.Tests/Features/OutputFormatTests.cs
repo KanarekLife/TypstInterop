@@ -59,6 +59,28 @@ public class OutputFormatTests
     }
 
     [Fact]
+    public void Compile_Html_HonoursPrettyOutput()
+    {
+        using var compiler = new TypstCompiler();
+        const string source = "= Hello HTML\n\nSome paragraph text.";
+
+        var compact = compiler.Compile(c => c
+            .WithSource(source)
+            .WithFormat(TypstOutputFormat.Html));
+        var pretty = compiler.Compile(c => c
+            .WithSource(source)
+            .WithFormat(TypstOutputFormat.Html)
+            .WithPrettyOutput());
+
+        Assert.True(compact.IsSuccess, compact.ErrorMessage);
+        Assert.True(pretty.IsSuccess, pretty.ErrorMessage);
+        var compactHtml = Encoding.UTF8.GetString(compact.Output.ToArray());
+        var prettyHtml = Encoding.UTF8.GetString(pretty.Output.ToArray());
+        Assert.NotEqual(compactHtml, prettyHtml);
+        Assert.True(prettyHtml.Count(ch => ch == '\n') > compactHtml.Count(ch => ch == '\n'));
+    }
+
+    [Fact]
     public void Compile_Pdf_DefaultFormat_ProducesSinglePdf()
     {
         using var compiler = new TypstCompiler();

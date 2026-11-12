@@ -82,6 +82,14 @@ foreach (var diagnostic in result.Diagnostics)
 }
 ```
 
+## Internal compiler errors
+
+If Typst itself hits a bug and panics while compiling, the panic is caught at the native boundary instead of crashing your process. `Compile` returns a failed result with a single error diagnostic whose message starts with `the Typst compiler panicked:`. The compiler instance stays usable for later compilations. Rust also prints the panic message to stderr.
+
+A panic while constructing a `TypstCompiler` (for example during system font discovery) throws `InvalidOperationException`.
+
+Stack overflows from extremely deep recursion are not panics and still terminate the process.
+
 ## See also
 
 - [Output Formats](output-formats.md) — `Outputs`, formats, and PDF options (PDF/A errors surface here).

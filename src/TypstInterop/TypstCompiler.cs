@@ -18,7 +18,7 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
 
     private readonly VfsWorld* _world;
     private readonly ReaderWriterLockSlim _lock = new();
-    private bool _isDisposed;
+    private volatile bool _isDisposed;
 
     // Reset at the start of every Compile call; written by the With* option methods.
     private TypstCompileOptions _options = new();
@@ -67,7 +67,38 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
                 pRootPath
             );
         }
+
+        // The native side returns null if world construction panicked (for
+        // example while scanning system fonts); every later call would
+        // dereference it, so fail here instead.
+        if (_world == null)
+        {
+            GC.SuppressFinalize(this);
+            throw new InvalidOperationException(
+                "Failed to initialize the native Typst compiler. The native library reported an internal error; see stderr for details.");
+        }
     }
+
+#if DEBUG
+    /// <summary>
+    /// Test hook: makes the next <see cref="Compile"/> panic inside the native
+    /// library, to verify panics surface as a failed result instead of
+    /// crashing the process. Only available in Debug builds.
+    /// </summary>
+    internal void DebugPanicOnNextCompile()
+    {
+        _lock.EnterWriteLock();
+        try
+        {
+            CheckDisposed();
+            NativeMethods.typst_debug_panic_next_compile(_world);
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
+    }
+#endif
 
     private void CheckDisposed()
     {
@@ -78,13 +109,13 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
     /// <inheritdoc />
     public TypstCompilationResult Compile(Func<ITypstConfigurator, ITypstConfigurator> build)
     {
-        CheckDisposed();
         if (build is null)
             throw new ArgumentNullException(nameof(build));
 
         _lock.EnterWriteLock();
         try
         {
+            CheckDisposed();
             NativeMethods.typst_context_reset(_world);
             var options = _options = new TypstCompileOptions();
             build(this);
@@ -131,11 +162,10 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
     /// <inheritdoc />
     public IReadOnlyList<string> ListFonts()
     {
-        CheckDisposed();
-
         _lock.EnterReadLock();
         try
         {
+            CheckDisposed();
             var pFonts = NativeMethods.typst_list_fonts(_world);
             if (pFonts == null)
                 return [];
@@ -221,9 +251,7 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
 
     ITypstConfigurator ITypstConfigurator.WithFile(ReadOnlySpan<char> path, Stream stream)
     {
-        using var ms = new MemoryStream();
-        stream.CopyTo(ms);
-        return ((ITypstConfigurator)this).WithFile(path, ms.ToArray().AsSpan());
+        return ((ITypstConfigurator)this).WithFile(path, ReadAll(stream));
     }
 
     ITypstConfigurator ITypstConfigurator.WithFile(
@@ -267,13 +295,15 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
 
     ITypstConfigurator ITypstConfigurator.WithFont(Stream stream)
     {
-        using var ms = new MemoryStream();
-        stream.CopyTo(ms);
-        return ((ITypstConfigurator)this).WithFont(ms.ToArray().AsSpan());
+        return ((ITypstConfigurator)this).WithFont(ReadAll(stream));
     }
 
     ITypstConfigurator ITypstConfigurator.WithPackage(string packageSpec, Action<ITypstPackageConfigurator> configure)
     {
+        if (packageSpec is null)
+            throw new ArgumentNullException(nameof(packageSpec));
+        if (configure is null)
+            throw new ArgumentNullException(nameof(configure));
         var configurator = new TypstPackageConfigurator(this, packageSpec);
         configure(configurator);
         return this;
@@ -372,9 +402,7 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
 
         public ITypstPackageConfigurator WithFile(ReadOnlySpan<char> path, Stream stream)
         {
-            using var ms = new MemoryStream();
-            stream.CopyTo(ms);
-            return WithFile(path, ms.ToArray().AsSpan());
+            return WithFile(path, ReadAll(stream));
         }
 
         public ITypstPackageConfigurator WithDirectory(string directoryPath, bool recursive = true)
@@ -408,6 +436,24 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
 
     #endregion
 
+    /// <summary>
+    /// Reads a stream to the end and returns a view over its contents. The
+    /// native side copies the bytes, so the MemoryStream's internal buffer is
+    /// exposed directly instead of paying for an extra <c>ToArray</c> copy.
+    /// </summary>
+    private static ReadOnlySpan<byte> ReadAll(Stream stream)
+    {
+        if (stream is null)
+            throw new ArgumentNullException(nameof(stream));
+        var ms = stream.CanSeek
+            ? new MemoryStream(checked((int)Math.Max(0, stream.Length - stream.Position)))
+            : new MemoryStream();
+        stream.CopyTo(ms);
+        return ms.TryGetBuffer(out var buffer)
+            ? buffer.AsSpan()
+            : ms.ToArray();
+    }
+
     private static string PtrToStringUtf8(byte* ptr)
     {
         if (ptr == null)
@@ -438,17 +484,39 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
     /// <summary>
     /// Releases the native Typst world (fonts and package cache) held by this instance.
     /// </summary>
+    /// <remarks>
+    /// Waits for an in-flight <see cref="Compile"/> or <see cref="ListFonts"/>
+    /// on another thread to finish before freeing the native world, so the
+    /// world is never released while it is in use.
+    /// </remarks>
     public void Dispose()
     {
         if (_isDisposed)
             return;
-        if (_world != null)
+
+        // The lock is intentionally never disposed: a thread may still be
+        // waiting on it, and disposing a ReaderWriterLockSlim with waiters
+        // throws. Late callers acquire it and then see ObjectDisposedException.
+        _lock.EnterWriteLock();
+        try
         {
-            NativeMethods.typst_context_free(_world);
+            if (_isDisposed)
+                return;
+            FreeWorld();
         }
-        _lock.Dispose();
-        _isDisposed = true;
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
+
         GC.SuppressFinalize(this);
+    }
+
+    private void FreeWorld()
+    {
+        if (_world != null)
+            NativeMethods.typst_context_free(_world);
+        _isDisposed = true;
     }
 
     /// <summary>
@@ -456,6 +524,8 @@ public sealed unsafe class TypstCompiler : ITypstCompiler, ITypstConfigurator
     /// </summary>
     ~TypstCompiler()
     {
-        Dispose();
+        // The object is unreachable, so no other thread can be using the world.
+        if (!_isDisposed)
+            FreeWorld();
     }
 }

@@ -2,7 +2,7 @@
 // Competitor benchmarks.
 //
 // This file is GUARDED by the HAS_TYPSTSHARP compilation symbol (defined in the
-// csproj only for net10.0). If the competitor package cannot be restored/built
+// csproj only for the .NET (Core) TFMs). If the competitor package cannot be restored/built
 // for a given TFM/platform, define-out the symbol and the whole suite still
 // builds and runs (just without the competitor rows).
 //
@@ -10,7 +10,7 @@
 // HOW TO ADD A NEW COMPETITOR
 // -----------------------------------------------------------------------------
 // 1. Add a guarded <PackageReference> in TypstInterop.Benchmarks.csproj, e.g.:
-//        <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+//        <ItemGroup Condition="'$(TargetFramework)' != '' and $([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">
 //          <PackageReference Include="Some.Typst.Wrapper" Version="x.y.z" />
 //        </ItemGroup>
 //    and define a matching compilation symbol (e.g. HAS_SOMEWRAPPER) in the
@@ -48,11 +48,11 @@ namespace TypstInterop.Benchmarks;
 ///     therefore stages <c>logo.png</c> on disk once in [GlobalSetup] (outside
 ///     the measured region) and points the compiler at that root.
 ///
-/// NOTE: the published 0.14.2.2 package only ships a win-x64 native binary, so
-/// these benchmarks only execute on Windows x64. On other platforms the suite
-/// still builds; these methods will throw at runtime when the native library
-/// cannot be loaded (BenchmarkDotNet reports them as failed without aborting
-/// the rest of the run).
+/// NOTE: the default typstsharp version (0.15.1.3) only ships win-x64 and
+/// linux-x64 native binaries, so these benchmarks only execute there. On other
+/// platforms (macOS, arm64) the suite still builds; these methods will throw at
+/// runtime when the native library cannot be loaded (BenchmarkDotNet reports
+/// them as failed without aborting the rest of the run).
 /// </summary>
 [MemoryDiagnoser]
 [CategoriesColumn]
@@ -80,7 +80,7 @@ public class TypstSharpBenchmarks
     public byte[] Simple_TypstSharp()
     {
         using var compiler = CompetitorCompiler.FromSource(Scenarios.Simple);
-        return compiler.Compile().Buffers[0];
+        return compiler.CompilePdf();
     }
 
     [Benchmark]
@@ -96,7 +96,7 @@ public class TypstSharpBenchmarks
             Scenarios.WithInputs,
             sysInputs: sysInputs,
             root: _rootDir);
-        return compiler.Compile().Buffers[0];
+        return compiler.CompilePdf();
     }
 
     [Benchmark]
@@ -104,7 +104,7 @@ public class TypstSharpBenchmarks
     public byte[] Large_TypstSharp()
     {
         using var compiler = CompetitorCompiler.FromSource(Scenarios.Large);
-        return compiler.Compile().Buffers[0];
+        return compiler.CompilePdf();
     }
 }
 #endif

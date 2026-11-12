@@ -4,7 +4,7 @@ TypstInterop is a managed .NET library wrapping a native Rust FFI layer. Buildin
 
 ## Prerequisites
 
-- **.NET SDK** — capable of building the targeted frameworks (.NET 8/9/10 and, on Windows, .NET Framework 4.8).
+- **.NET SDK 11** — `global.json` requires 11.0.100 or a later feature band; it builds every target framework (.NET 8/10/11 and, on Windows, .NET Framework 4.8). Running the tests for a given TFM also needs that runtime installed.
 - **Rust toolchain** — install via [rustup](https://rustup.rs/). The managed build invokes `cargo` automatically.
 
 ## Building

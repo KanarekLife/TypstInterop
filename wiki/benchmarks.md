@@ -25,14 +25,14 @@ We searched nuget.org and the web for "typst nuget", "typst dotnet",
 
 | Package | Approach | Latest version | Frameworks | Included? |
 |---|---|---|---|---|
-| **TypstInterop** (this library) | Managed C# over a Rust cdylib (P/Invoke). In-memory virtual file system; caches a Typst *world* (fonts + package cache) per compiler instance and resets it between compilations. | wraps Typst 0.15.1 | net10.0; net48 | Yes (baseline) |
-| **[typstsharp](https://www.nuget.org/packages/typstsharp)** ([repo](https://github.com/evolvedlight/typstsharp)) | Managed C# over a Rust `rust_core` cdylib (P/Invoke, generated with `csbindgen`). Source bound to the compiler instance via `TypstCompiler.FromSource(...)`; external files read from an on-disk `root`. Ships native binaries inside the package. | 0.14.2.2 (Feb 2026) | net8.0; net9.0; net10.0 | Yes (net10.0) |
+| **TypstInterop** (this library) | Managed C# over a Rust cdylib (P/Invoke). In-memory virtual file system; caches a Typst *world* (fonts + package cache) per compiler instance and resets it between compilations. | wraps Typst 0.15.1 | net11.0; net10.0; net48 | Yes (baseline) |
+| **[typstsharp](https://www.nuget.org/packages/typstsharp)** ([repo](https://github.com/evolvedlight/typstsharp)) | Managed C# over a Rust `rust_core` cdylib (P/Invoke, generated with `csbindgen`). Source bound to the compiler instance via `TypstCompiler.FromSource(...)`; external files read from an on-disk `root`. Ships native binaries inside the package. | 0.15.1.3 (Oct 2026, Typst 0.15.1) | net8.0; net9.0; net10.0 | Yes (net11.0, net10.0) |
 | **[Typst.Net](https://www.nuget.org/packages/Typst.Net)** ([libraries.io](https://libraries.io/nuget/Typst.Net)) | Managed C# over a Rust FFI layer. `new TypstCompiler(source)` then `Compile()` returning `(pages, warnings)`. AI-generated codebase, explicitly flagged as not production-reviewed. | 0.1.1-typst0.13.1 (prerelease, Aug 2025) | net8.0 | No — see below |
 
 ### Why each competitor was included or excluded
 
 - **typstsharp — included.** It is the closest direct competitor: an actively
-  maintained (releases through Feb 2026) native Typst wrapper that targets
+  maintained (releases through Oct 2026) native Typst wrapper that targets
   net10.0 and is installable from NuGet. It is wired into the suite as a guarded
   benchmark class.
 - **Typst.Net — excluded.** Only published as a `0.1.x` *prerelease* tied to the
@@ -49,18 +49,22 @@ identifier (RID), and the available RIDs **changed between versions**:
 
 | typstsharp version | Native RIDs shipped | Runs on Linux x64? |
 |---|---|---|
-| 0.14.2.2 (latest) | win-x64 **only** | No |
+| 0.15.1.3 (latest) | win-x64, linux-x64 | Yes |
+| 0.15.1.1 | win-x64, linux-x64 | Yes |
+| 0.14.2.2 | win-x64 **only** | No |
 | 0.14.2 | win-x64, linux-x64 | Yes |
 | 0.14.1 | win-x64, linux-x64 | Yes |
 | 0.0.8 | win-x64, linux-x64 | Yes |
 
-The latest release (0.14.2.2) regressed to shipping **only** a Windows binary,
-so it cannot execute on Linux/macOS. The harness therefore defaults to
-**typstsharp 0.14.2** — the most recent version that still carries a `linux-x64`
-binary — so the comparison runs out of the box on Linux CI. The version is
-overridable (see below) to compare across releases. The managed
-`FromSource(source, fonts, sysInputs, root)` API is stable across 0.14.1 /
-0.14.2 / 0.14.2.2, so the same benchmark code compiles against all of them.
+0.14.2.2 regressed to shipping **only** a Windows binary; the 0.15.1.x line
+restored `linux-x64`. The harness defaults to **typstsharp 0.15.1.3**, which
+wraps the same Typst version (0.15.1) as this library, so the comparison is
+like-for-like and runs out of the box on Linux x64 and Windows x64 (no macOS or
+arm64 binary). The version is overridable (see below) to compare across
+releases. The managed `FromSource(source, fonts, sysInputs, root)` API is stable
+from 0.14.1 through 0.15.1.3; the benchmarks call `CompilePdf()`, which 0.15.1.x
+recommends over the deprecated `Compile().Buffers` (older versions may need the
+latter).
 
 ## Methodology
 
@@ -121,15 +125,15 @@ scenario (`Simple` / `Large`). The PDF path is already covered by
   `Html`) and scenario.
 - `Simple_Reuse` is the `[Baseline]`, so ratios are reported relative to it.
 - The competitor class is **guarded** by the `HAS_TYPSTSHARP` compilation symbol
-  (defined only for net10.0 in the csproj). If the competitor package is removed
+  (defined for the .NET (Core) TFMs in the csproj). If the competitor package is removed
   or unavailable for a TFM, the suite still builds and runs without it.
-- net10.0 is the primary benchmark TFM. The project also targets net48 for
-  building, but competitor benchmarks are scoped to net10.0 (typstsharp is
-  net8.0+ and native-only).
+- net11.0 is the primary benchmark TFM (net10.0 is also built). The project
+  also targets net48 for building, but competitor benchmarks are scoped to the
+  .NET (Core) TFMs (typstsharp is net8.0+ and native-only).
 
 ## How to run it locally
 
-Prerequisites: .NET SDK 10, a Rust toolchain (the TypstInterop native library
+Prerequisites: .NET SDK 11, a Rust toolchain (the TypstInterop native library
 is built by the project), and network access to restore the competitor package.
 
 Build the native crate first (this is normally automatic via the project build):
@@ -138,16 +142,16 @@ Build the native crate first (this is normally automatic via the project build):
 cd src/typst_interop && cargo build --release
 ```
 
-Run the full suite (net10.0), real configuration:
+Run the full suite (net11.0), real configuration:
 
 ```bash
-dotnet run -c Release --project src/TypstInterop.Benchmarks --framework net10.0 -- --filter '*'
+dotnet run -c Release --project src/TypstInterop.Benchmarks --framework net11.0 -- --filter '*'
 ```
 
 Quick, representative run (reduced iterations — what produced the table below):
 
 ```bash
-dotnet run -c Release --project src/TypstInterop.Benchmarks --framework net10.0 -- \
+dotnet run -c Release --project src/TypstInterop.Benchmarks --framework net11.0 -- \
   --filter '*' --warmupCount 3 --iterationCount 5 --invocationCount 32 --unrollFactor 1
 ```
 
@@ -155,18 +159,18 @@ Focus on a single library or scenario:
 
 ```bash
 # only TypstInterop (PDF reuse/fresh)
-dotnet run -c Release --project src/TypstInterop.Benchmarks -f net10.0 -- --filter '*TypstInteropBenchmarks*'
+dotnet run -c Release --project src/TypstInterop.Benchmarks -f net11.0 -- --filter '*TypstInteropBenchmarks*'
 # only the output-format benchmarks (PNG/SVG/HTML)
-dotnet run -c Release --project src/TypstInterop.Benchmarks -f net10.0 -- --filter '*OutputFormatBenchmarks*'
+dotnet run -c Release --project src/TypstInterop.Benchmarks -f net11.0 -- --filter '*OutputFormatBenchmarks*'
 # only the Simple scenario, all libraries
-dotnet run -c Release --project src/TypstInterop.Benchmarks -f net10.0 -- --filter '*Simple*'
+dotnet run -c Release --project src/TypstInterop.Benchmarks -f net11.0 -- --filter '*Simple*'
 ```
 
 Compare across typstsharp versions (only versions with a binary for your OS
 will execute — see the caveat table above):
 
 ```bash
-dotnet run -c Release --project src/TypstInterop.Benchmarks -f net10.0 -p:TypstSharpVersion=0.14.1 -- --filter '*TypstSharp*'
+dotnet run -c Release --project src/TypstInterop.Benchmarks -f net11.0 -p:TypstSharpVersion=0.14.1 -- --filter '*TypstSharp*'
 ```
 
 Generated reports are written to `BenchmarkDotNet.Artifacts/results/` (CSV,
@@ -196,27 +200,35 @@ To add **Typst.Net** specifically: reference `Typst.Net 0.1.1-typst0.13.1`
 ## Results
 
 Captured on the machine below with the *quick representative* configuration
-(`WarmupCount=3 IterationCount=5 InvocationCount=32`). Absolute numbers are
+(`WarmupCount=3 IterationCount=5 InvocationCount=32`), inside the CI image
+(`docker/ci.Dockerfile`) with the host's `/usr/share/fonts` mounted so font
+discovery matches a normal desktop install. Absolute numbers are
 machine-dependent; the **ratios between methods** are the meaningful, portable
-takeaway. typstsharp version used: **0.14.2** (latest with a linux-x64 binary).
+takeaway. typstsharp version used: **0.15.1.3** (same Typst 0.15.1 as
+TypstInterop).
 
 ```
-BenchmarkDotNet v0.15.8, Linux Fedora Linux 44
-AMD Ryzen 7 7700X, 1 CPU, 16 logical / 8 physical cores
-.NET SDK 10.0.108, .NET 10.0.8 (X64 RyuJIT x86-64-v4)
+BenchmarkDotNet v0.16.0-preview.2, Linux Ubuntu 26.04.1 LTS (container)
+AMD Ryzen 7 7700X 3.14GHz, 1 CPU, 16 logical and 8 physical cores
+.NET SDK 11.0.100, .NET 11.0.0 (X64 RyuJIT x86-64-v4)
 ```
+
+BenchmarkDotNet 0.15.8 (the latest stable release) cannot run on .NET 11
+(`GetRuntimeVersion not implemented`), so the benchmark project uses the
+0.16.0 preview. It is not shipped, so the preview dependency never reaches
+consumers.
 
 ### TypstInterop — PDF (baseline = `Simple_Reuse`)
 
 | Method | Scenario | Mean | StdDev | Ratio | Allocated |
 |---|---|---:|---:|---:|---:|
-| `Simple_Reuse` | Simple | 76.72 μs | 0.87 μs | 1.00 | 5.63 KB |
-| `Simple_Fresh` | Simple | 844.83 μs | 2.17 μs | 11.01 | 5.84 KB |
-| `Inputs_Reuse` | Inputs | 707.64 μs | 7.45 μs | 9.22 | 11.09 KB |
-| `Large_Reuse` | Large | 1,235.31 μs | 12.78 μs | 16.10 | 52.33 KB |
-| `Large_Fresh` | Large | 2,043.17 μs | 34.81 μs | 26.63 | 52.50 KB |
+| `Simple_Reuse` | Simple | 79.84 μs | 8.48 μs | 1.00 | 11.08 KB |
+| `Simple_Fresh` | Simple | 788.91 μs | 0.53 μs | 9.97 | 11.37 KB |
+| `Inputs_Reuse` | Inputs | 682.52 μs | 1.35 μs | 8.62 | 21.61 KB |
+| `Large_Reuse` | Large | 1,194.67 μs | 1.60 μs | 15.09 | 101.08 KB |
+| `Large_Fresh` | Large | 1,932.78 μs | 2.16 μs | 24.42 | 101.37 KB |
 
-### TypstInterop — output formats (v1.1.0, reused compiler)
+### TypstInterop — output formats (reused compiler)
 
 PNG/SVG emit one output element per page; HTML/PDF emit a single element. PNG
 is by far the most expensive format because it rasterizes every page at the
@@ -225,50 +237,54 @@ configured PPI (144 here); SVG and HTML are vector/text and stay cheap. The
 
 | Method | Format | Scenario | Mean | StdDev | Allocated |
 |---|---|---|---:|---:|---:|
-| `Simple_Html` | HTML | Simple | 6.13 μs | 0.34 μs | 904 B |
-| `Large_Html` | HTML | Large | 209.27 μs | 0.51 μs | 10,328 B |
-| `Simple_Svg` | SVG | Simple | 90.87 μs | 0.75 μs | 7,520 B |
-| `Large_Svg` | SVG | Large | 5,861.41 μs | 20.34 μs | 391,591 B |
-| `Simple_Png` | PNG | Simple | 28,122.07 μs | 245.76 μs | 15,520 B |
-| `Large_Png` | PNG | Large | 154,547.30 μs | 111.80 μs | 463,940 B |
+| `Simple_Html` | HTML | Simple | 6.08 μs | 0.53 μs | 936 B |
+| `Large_Html` | HTML | Large | 191.94 μs | 0.40 μs | 8,992 B |
+| `Simple_Svg` | SVG | Simple | 87.74 μs | 0.77 μs | 7,584 B |
+| `Large_Svg` | SVG | Large | 5,520.41 μs | 30.24 μs | 391,650 B |
+| `Simple_Png` | PNG | Simple | 28,389.31 μs | 323.93 μs | 15,584 B |
+| `Large_Png` | PNG | Large | 163,298.17 μs | 340.25 μs | 463,998 B |
 
-### typstsharp 0.14.2 — PDF (fresh-per-compilation by design)
+### typstsharp 0.15.1.3 — PDF (fresh-per-compilation by design)
 
 | Method | Scenario | Mean | StdDev | Allocated |
 |---|---|---:|---:|---:|
-| `Simple_TypstSharp` | Simple | 45.24 ms | 0.52 ms | 6.40 KB |
-| `Inputs_TypstSharp` | Inputs | 45.85 ms | 0.80 ms | 12.52 KB |
-| `Large_TypstSharp` | Large | 55.76 ms | 0.41 ms | 57.99 KB |
+| `Simple_TypstSharp` | Simple | 42.05 ms | 0.45 ms | 5.75 KB |
+| `Inputs_TypstSharp` | Inputs | 41.42 ms | 0.16 ms | 11.20 KB |
+| `Large_TypstSharp` | Large | 50.86 ms | 0.23 ms | 49.05 KB |
 
 ### Cross-library comparison — PDF (same scenario)
 
-| Scenario | TypstInterop (Reuse) | TypstInterop (Fresh) | typstsharp 0.14.2 |
+| Scenario | TypstInterop (Reuse) | TypstInterop (Fresh) | typstsharp 0.15.1.3 |
 |---|---:|---:|---:|
-| Simple | 0.077 ms | 0.84 ms | 45.2 ms |
-| Inputs | 0.71 ms | — *(no fresh variant)* | 45.9 ms |
-| Large | 1.24 ms | 2.04 ms | 55.8 ms |
+| Simple | 0.080 ms | 0.79 ms | 42.1 ms |
+| Inputs | 0.68 ms | — *(no fresh variant)* | 41.4 ms |
+| Large | 1.19 ms | 1.93 ms | 50.9 ms |
 
 ### Interpretation
 
 - On the **Simple** scenario, TypstInterop with a reused compiler is roughly
-  **590×** faster than typstsharp (0.077 ms vs 45.2 ms), and even a cold/fresh
-  TypstInterop compiler is ~**54×** faster.
+  **530×** faster than typstsharp (0.080 ms vs 42.1 ms), and even a cold/fresh
+  TypstInterop compiler is ~**53×** faster. Both libraries now wrap the same
+  Typst version (0.15.1), so this is a like-for-like comparison.
 - The gap is dominated by typstsharp re-initializing the Typst world and loading
   system fonts on every `FromSource(...)`, whereas TypstInterop caches the world
   per instance. This is the core architectural difference the benchmark exists
   to highlight.
 - On the **Large** scenario the relative gap narrows (more time is spent on
-  actual layout that both libraries must do) but TypstInterop is still ~**45×**
+  actual layout that both libraries must do) but TypstInterop is still ~**43×**
   faster when reusing a compiler.
-- Allocations are comparable and small for both libraries; the time difference
-  is in native work, not managed GC pressure.
-- **Output formats (v1.1.0):** HTML and SVG are cheap (text/vector) — HTML
-  export is even faster than PDF on the Simple scenario (6 μs). **PNG is by far
-  the most expensive** because it rasterizes each page at the configured PPI
-  (144); the Large scenario (two pages) takes ~155 ms versus ~1.2 ms for the
-  same document as PDF. Pick PNG only when you actually need raster output, and
-  tune `Ppi` down if you can — the cost scales with pixel count. Allocations
-  track the size of the rendered output (largest for multi-page PNG/SVG).
+- Allocations are small for both libraries; the time difference is in native
+  work, not managed GC pressure. TypstInterop's managed allocation is dominated
+  by copying the produced PDF into a `byte[]`, so it tracks output size.
+- `Simple_Reuse` is the noisiest row (StdDev 8.5 μs on an 80 μs mean); its ratio
+  column should be read as approximate.
+- **Output formats:** HTML and SVG are cheap (text/vector) — HTML export is even
+  faster than PDF on the Simple scenario (6 μs). **PNG is by far the most
+  expensive** because it rasterizes each page at the configured PPI (144); the
+  Large scenario (two pages) takes ~163 ms versus ~1.2 ms for the same document
+  as PDF. Pick PNG only when you actually need raster output, and tune `Ppi`
+  down if you can — the cost scales with pixel count. Allocations track the size
+  of the rendered output (largest for multi-page PNG/SVG).
 
 > These numbers are from a single quick run on one machine and are intended as a
 > directional comparison. Re-run with the full configuration (drop the

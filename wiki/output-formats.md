@@ -78,7 +78,7 @@ for (var page = 0; page < result.Outputs.Count; page++)
 
 ### HTML
 
-HTML export produces a single document. Note that Typst's HTML export is experimental.
+HTML export produces a single document. Note that Typst's HTML export is experimental. Like SVG, it is compact unless `WithPrettyOutput()` is set.
 
 ```csharp
 var result = compiler.Compile(c => c

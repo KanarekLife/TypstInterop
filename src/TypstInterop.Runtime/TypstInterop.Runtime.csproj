@@ -24,7 +24,7 @@
           PackagePath="runtimes/$(RuntimeIdentifier)/native/" />
 
     <!-- _._ marks each TFM as compatible without shipping a managed DLL (NuGet
-         convention). net9/net10 consumers resolve to the net8.0 group. -->
+         convention). net9/net10/net11 consumers resolve to the net8.0 group. -->
     <None Include="lib/_._" Pack="true" PackagePath="lib/net8.0/" />
     <None Include="lib/_._" Pack="true" PackagePath="lib/netstandard2.0/" />
     <None Include="lib/_._" Pack="true" PackagePath="lib/net48/" />

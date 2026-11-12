@@ -26,7 +26,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '11.0.x'
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
@@ -73,10 +73,10 @@ jobs:
   dotnet-vulnerable:
     name: .NET vulnerable packages
     runs-on: ubuntu-latest
-    # Runs in the official .NET SDK image for a reproducible toolchain. The 10.0
-    # SDK is baked in; setup-dotnet adds 8.0 and 9.0 so the version set matches
-    # the rest of CI. BuildRust=false everywhere here, so no Rust is needed.
-    container: mcr.microsoft.com/dotnet/sdk:10.0@sha256:548d93f8a18a1acbe6cc127bc4f47281430d34a9e35c18afa80a8d6741c2adc3
+    # Runs in the official .NET SDK image for a reproducible toolchain. The 11.0
+    # SDK is baked in and restores every TFM. BuildRust=false everywhere here,
+    # so no Rust is needed.
+    container: mcr.microsoft.com/dotnet/sdk:11.0@sha256:65f3c7c6a25a239ab3e6719f2896147e7b68242ff2d8818dd70498bde6ef8bea
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -85,10 +85,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
-          dotnet-version: |
-            8.0.x
-            9.0.x
-            10.0.x
+          dotnet-version: '11.0.x'
 
       - name: Restore
         run: dotnet restore TypstInterop.slnx -p:BuildRust=false
