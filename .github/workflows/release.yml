@@ -231,8 +231,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
     uses: ./.github/workflows/_publish.yml
-    secrets: inherit
 
   release:
     name: Create GitHub Release

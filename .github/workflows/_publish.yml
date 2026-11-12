@@ -4,7 +4,11 @@
 # Called by build-and-pack.yml (manual publish) and release.yml (release flow).
 # Both pushes use --skip-duplicate, so re-running is idempotent.
 #
-# Callers MUST pass `secrets: inherit` so NUGET_API_KEY is available.
+# NuGet.org uses Trusted Publishing: the job exchanges its GitHub OIDC token for
+# a short-lived (1 h) API key via NuGet/login, so no long-lived NuGet secret is
+# stored. The matching policy lives at nuget.org/account/trustedpublishing
+# (owner KanarekLife, repo KanarekLife/TypstInterop, environment `nuget`).
+# Callers must grant `id-token: write`.
 name: _publish
 
 on:
@@ -20,6 +24,8 @@ jobs:
   publish-nuget:
     name: Publish to NuGet
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     environment:
       name: nuget
       url: https://www.nuget.org/packages/TypstInterop
@@ -35,10 +41,17 @@ jobs:
           name: ${{ inputs.artifact }}
           path: nupkg
 
+      # Mint the short-lived key right before pushing: it expires after 1 hour.
+      - name: NuGet login (Trusted Publishing)
+        id: nuget-login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: KanarekLife
+
       - name: Push to NuGet
         run: dotnet nuget push ./nupkg/* --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
 
   publish-github-packages:
     name: Publish to GitHub Packages
