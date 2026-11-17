@@ -89,7 +89,7 @@ jobs:
       # The .NET 11 SDK is baked into the image. setup-dotnet still pins the
       # exact channel so the version set stays consistent with the rest of CI.
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: '11.0.x'
 
@@ -138,7 +138,7 @@ jobs:
       # The .NET 11 SDK is baked into the image; setup-dotnet adds the 8.0 and
       # 10.0 runtimes the older test TFMs execute on.
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: |
             8.0.x
@@ -245,7 +245,7 @@ jobs:
 
       # Bare runners may not ship the SDK that global.json pins.
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: '11.0.x'
 
@@ -337,7 +337,7 @@ jobs:
       # The .NET 11 SDK is baked into the image and builds every TFM (including
       # net8.0/net10.0 via targeting packs); setup-dotnet pins the channel.
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: '11.0.x'
 
@@ -398,7 +398,7 @@ jobs:
 
       # The .NET 11 SDK is baked into the image; Rust (stable) is preinstalled.
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: '11.0.x'
 
