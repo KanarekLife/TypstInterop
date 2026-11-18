@@ -29,7 +29,7 @@ jobs:
           dotnet-version: '11.0.x'
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           languages: csharp
 
@@ -37,7 +37,7 @@ jobs:
         run: dotnet build src/TypstInterop/TypstInterop.csproj -c Release -p:BuildRust=false
 
       - name: Analyze
-        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
 
   rust-audit:
     name: Rust dependency audit
